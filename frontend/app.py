@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import html
 import mimetypes
 import os
 from io import BytesIO
@@ -240,11 +241,171 @@ def _sample_document_bytes() -> tuple[bytes, str]:
     return text, _SAMPLE_PATH.name
 
 
+def _thumb_data_url(uploaded_file) -> str | None:
+    name = (uploaded_file.name or "").lower()
+    if not (
+        name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
+        or (uploaded_file.type or "").startswith("image/")
+    ):
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        raw = uploaded_file.getvalue()
+        im = Image.open(BytesIO(raw)).convert("RGB")
+        im.thumbnail((88, 88))
+        bio = BytesIO()
+        im.save(bio, format="JPEG", quality=82)
+        return "data:image/jpeg;base64," + base64.standard_b64encode(bio.getvalue()).decode("ascii")
+    except Exception:
+        return None
+
+
+def _media_chips_html(files: list) -> str:
+    if not files:
+        return ""
+    chips: list[str] = []
+    for uf in files:
+        label = html.escape((uf.name or "Attachment")[:56])
+        thumb = _thumb_data_url(uf)
+        if thumb:
+            chips.append(
+                f'<div class="cg-chip cg-chip-media">'
+                f'<img class="cg-chip-img" src="{thumb}" alt="" />'
+                f'<div class="cg-chip-text"><span class="cg-chip-name">{label}</span>'
+                f'<span class="cg-chip-sub">Image</span></div></div>'
+            )
+        else:
+            chips.append(
+                f'<div class="cg-chip cg-chip-file">'
+                f'<div class="cg-chip-icon">▣</div>'
+                f'<div class="cg-chip-text"><span class="cg-chip-name">{label}</span>'
+                f'<span class="cg-chip-sub">File</span></div></div>'
+            )
+    return '<div class="cg-attach-row">' + "".join(chips) + "</div>"
+
+
+def _inject_chatgpt_styles() -> None:
+    st.markdown(
+        """
+<style>
+  /* App shell */
+  .stApp { background-color: #212121 !important; color: #ececec !important; }
+  .block-container { padding-top: 1.25rem !important; max-width: 880px !important; }
+  header[data-testid="stHeader"] { background: transparent !important; }
+  div[data-testid="stToolbar"] { display: none !important; }
+
+  /* Typography */
+  h1 { font-size: 1.35rem !important; font-weight: 600 !important; letter-spacing: -0.02em !important; }
+  .cg-subtitle { color: #b4b4b4 !important; font-size: 0.9rem !important; margin-top: -0.5rem !important; }
+
+  /* Sidebar */
+  section[data-testid="stSidebar"] {
+    background-color: #171717 !important;
+    border-right: 1px solid #303030 !important;
+  }
+  section[data-testid="stSidebar"] .block-container { padding-top: 1rem !important; }
+
+  /* Chat bubbles */
+  [data-testid="stChatMessage"] { background: transparent !important; }
+  [data-testid="stChatMessage"] > div {
+    border-radius: 18px !important;
+    padding: 0.65rem 0.85rem !important;
+  }
+
+  .cg-attach-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .cg-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #3a3a3a;
+    border: 1px solid #555;
+    border-radius: 12px;
+    padding: 6px 10px 6px 6px;
+    min-height: 52px;
+    max-width: 100%;
+  }
+  .cg-chip-img {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .cg-chip-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    background: #2f2f2f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: #c8c8c8;
+    flex-shrink: 0;
+  }
+  .cg-chip-text { display: flex; flex-direction: column; min-width: 0; }
+  .cg-chip-name { font-size: 0.82rem; color: #ececec; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+  .cg-chip-sub { font-size: 0.72rem; color: #9a9a9a; }
+
+  /* File uploaders — ChatGPT-like drop zone */
+  [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"] {
+    background: #2a2a2a !important;
+    border: 1px dashed #5a5a5a !important;
+    border-radius: 14px !important;
+  }
+  [data-testid="stFileUploader"] small { color: #b0b0b0 !important; }
+
+  .cg-plus { font-size: 1.45rem; color: #c4c4c4; padding: 10px 0 0 4px; user-select: none; line-height: 1; }
+
+  /* Chat input — pill like ChatGPT */
+  [data-testid="stChatInput"] {
+    background-color: #2f2f2f !important;
+    border: 1px solid #4a4a4a !important;
+    border-radius: 26px !important;
+    padding: 4px 6px !important;
+  }
+  [data-testid="stChatInput"] textarea {
+    color: #ececec !important;
+    background: transparent !important;
+    border: none !important;
+    min-height: 44px !important;
+    font-size: 0.98rem !important;
+  }
+  [data-testid="stChatInput"] textarea::placeholder {
+    color: #8e8e8e !important;
+  }
+  [data-testid="stChatInput"] button {
+    border-radius: 999px !important;
+    background: #ececec !important;
+    color: #212121 !important;
+  }
+
+  /* Buttons */
+  .stButton > button {
+    border-radius: 10px !important;
+  }
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+
 st.set_page_config(
     page_title="AI Business Assistant",
     page_icon="💼",
-    layout="centered",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
+
+_inject_chatgpt_styles()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -254,18 +415,15 @@ if "media_widget_id" not in st.session_state:
     st.session_state.media_widget_id = 0
 
 st.title("AI Business Assistant")
-st.caption(
-    "Ask questions in everyday language. Answers use **your uploaded company documents** "
-    "when they contain relevant information."
-)
+st.markdown('<p class="cg-subtitle">Company documents + optional images. Answers stay grounded in what you indexed.</p>', unsafe_allow_html=True)
 
-st.info(
-    "**Getting started:** (1) Use **Test connection** in the sidebar. "
-    "(2) Upload a company document and add it to your knowledge base (PDFs with charts or photos "
-    "get short text descriptions added automatically when possible). "
-    "(3) Ask a question—or add a **photo or short video** with your question, like in ChatGPT. "
-    "You can use the sample HR & FAQ file if you do not have your own file handy."
-)
+with st.expander("How to use", expanded=False):
+    st.markdown(
+        "1. **Test connection** in the sidebar.  \n"
+        "2. **Upload** a PDF, TXT, or image and **add to knowledge base**.  \n"
+        "3. **Ask anything** below — you can attach photos or a short video (first frame).  \n"
+        "Tip: use the sample HR / FAQ from the sidebar if you need a quick demo file."
+    )
 
 with st.sidebar:
     st.header("Workspace")
@@ -350,29 +508,39 @@ with st.sidebar:
         st.rerun()
 
 st.subheader("Chat")
-st.caption("This chat stays in your browser for this session. You may attach photos or a short video clip.")
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-media_widget_key = f"chat_media_{st.session_state.media_widget_id}"
-media_files = st.file_uploader(
-    "Optional: add a photo or short video for your next message",
-    type=["png", "jpg", "jpeg", "webp", "gif", "mp4", "webm", "mov"],
-    accept_multiple_files=True,
-    key=media_widget_key,
-    help="Videos use the first frame as a still image. For best results, keep clips small.",
-)
+st.caption("Add files for your next message, then use **Ask anything** or **Send files**.")
+
+row_u = st.columns([0.06, 0.94])
+with row_u[0]:
+    st.markdown('<div class="cg-plus" title="Add files">＋</div>', unsafe_allow_html=True)
+with row_u[1]:
+    media_widget_key = f"chat_media_{st.session_state.media_widget_id}"
+    media_files = st.file_uploader(
+        "Photos or short video",
+        type=["png", "jpg", "jpeg", "webp", "gif", "mp4", "webm", "mov"],
+        accept_multiple_files=True,
+        key=media_widget_key,
+        label_visibility="visible",
+        help="Videos use the first frame as a still image.",
+    )
+
 media_list = list(media_files) if media_files else []
 images_payload = _encode_chat_attachments(media_list)
+if media_list:
+    st.markdown(_media_chips_html(media_list), unsafe_allow_html=True)
+
 send_attachments_only = st.button(
-    "Send attachment only",
+    "Send files",
     disabled=not media_list,
-    help="Send your attached photos or video frame without typing in the chat box.",
+    help="Send attachments without typing a message.",
 )
 
-prompt = st.chat_input("Ask about your uploaded documents…")
+prompt = st.chat_input("Ask anything")
 chat_submitted = prompt is not None
 user_text = (prompt or "").strip() if chat_submitted else ""
 
