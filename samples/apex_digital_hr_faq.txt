@@ -1,0 +1,47 @@
+APEX DIGITAL SOLUTIONS — EMPLOYEE HANDBOOK (EXCERPTS) & INTERNAL FAQ
+Fictional sample document for demos. Last updated: Q1 2026.
+
+================================================================================
+SECTION A — REMOTE & HYBRID WORK
+================================================================================
+Eligible roles may work remotely up to three (3) days per week with manager approval.
+Core collaboration hours are 10:00–15:00 in the employee’s local time zone unless a client contract specifies otherwise.
+Employees must use company-approved VPN and endpoint protection on any device used for Apex work.
+
+================================================================================
+SECTION B — PAID TIME OFF (PTO)
+================================================================================
+Full-time employees accrue PTO at a rate of 1.25 days per month for the first two years of service, then 1.67 days per month thereafter, capped at 25 accrued days.
+PTO requests require at least five (5) business days’ notice unless approved as an exception by HR.
+Up to five (5) unused PTO days may carry over into the next calendar year; any excess is forfeited unless the carryover policy exception is granted in writing by HR.
+
+================================================================================
+SECTION C — CODE OF CONDUCT (SUMMARY)
+================================================================================
+Apex is committed to a respectful, inclusive workplace. Discrimination, harassment, or retaliation based on protected characteristics is prohibited and may result in disciplinary action up to termination.
+Confidential client and company information must not be disclosed outside approved channels. Social posts about clients require Legal review before publication.
+
+================================================================================
+SECTION D — INTERNAL FAQ (HR)
+================================================================================
+Q: Who do I contact for payroll corrections?
+A: Email payroll@apex-digital.example with your employee ID and pay period. Responses are within two business days.
+
+Q: How do I submit an expense report?
+A: Use the Finance Portal (Expenses tab). Attach receipts over $25. Reimbursement is processed on the 15th and last day of each month.
+
+Q: What is the dress code for client sites?
+A: Business casual unless the client specifies otherwise. When in doubt, ask your project lead at least 24 hours before the visit.
+
+Q: Are side projects allowed?
+A: Yes, if they do not compete with Apex services, do not use company resources, and are disclosed to your manager via the Outside Activities form.
+
+Q: What is the policy on AI tools for customer deliverables?
+A: Customer-facing work may use approved AI assistants listed on the Engineering wiki. Do not paste confidential data into unapproved tools. When unsure, open a ticket with Information Security.
+
+================================================================================
+CONTACTS (INTERNAL)
+================================================================================
+HR general inbox: hr@apex-digital.example
+Information Security: security@apex-digital.example
+Benefits broker hotline: 1-800-555-0199 (member ID on your benefits card)
