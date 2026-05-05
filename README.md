@@ -8,7 +8,7 @@ RAG-based agent: company documents → local FAISS → OpenAI answers (planned).
 
 - FastAPI app with `GET /health` only (`backend/app/main.py`).
 - Package layout: `backend/app/api/`, `services/`, `rag/` (empty except `__init__.py`).
-- Streamlit app shell (`frontend/app.py`; chat UI completed in Phase 6).
+- React frontend (`frontend-react/`) for the UI.
 - Dependencies: `requirements.txt`.
 - Secrets: `.env.example` template; `.env` for local keys (gitignored). Phase 2 loads `.env` from the project root.
 
@@ -37,8 +37,11 @@ AI Project/
 │       │   ├── vision_service.py
 │       │   └── rag.py
 │       └── rag/
-├── frontend/
-│   └── app.py
+├── frontend-react/
+│   ├── vite.config.ts
+│   └── src/
+│       ├── api/
+│       └── components/
 ├── samples/
 │   └── apex_digital_hr_faq.txt
 ├── requirements.txt
@@ -72,15 +75,17 @@ cd backend
 uvicorn app.main:app --reload
 ```
 
-### Run Streamlit
+### Run React (Vite)
 
 From project root (with the API running):
 
 ```powershell
-streamlit run frontend/app.py
+cd frontend-react
+npm install
+npm run dev
 ```
 
-Optional: set **`API_BASE_URL`** in `.env` if the API is not at `http://127.0.0.1:8000`.
+The React app uses a **dev proxy** so it can call the backend as `/api/*` (configured in `frontend-react/vite.config.ts`).
 
 ---
 
@@ -199,12 +204,9 @@ curl -X POST "http://127.0.0.1:8000/chat" ^
 
 ---
 
-## Phase 6 — Streamlit frontend (done)
+## Phase 6 — Streamlit frontend (removed)
 
-**Delivered**
-
-- `frontend/app.py` — ChatGPT-style **chat** (`st.chat_message`, `st.chat_input`), **sidebar**: API base URL, health check, upload + index, clear chat. **Phase 7** adds presentation polish (status steps, toasts, sample document download, clearer copy).
-- Uses **`requests`** against the FastAPI backend (same machine default `http://127.0.0.1:8000`). Optional **`API_BASE_URL`** in project `.env`.
+**Note**: The Streamlit UI was replaced by the React frontend under `frontend-react/`.
 
 **Not in scope for Phase 6**
 
@@ -222,16 +224,16 @@ uvicorn backend.app.main:app --reload
 Terminal 2 — UI:
 
 ```powershell
-streamlit run frontend/app.py
+cd frontend-react
+npm install
+npm run dev
 ```
 
 ---
 
 ## Phase 7 — Business polish (presentation) (done)
 
-**Delivered**
-
-- **`frontend/app.py`** — clearer **labels** (workspace, backend connection, business documents, conversation), **page icon**, top **how-to** callout, **toasts** on success/failure, **`st.status`** step indicators for document processing and answer generation, **friendlier errors** (timeouts, connection issues, HTTP hints), and safer JSON handling.
+**Delivered** (now implemented in the React UI)
 - **`samples/apex_digital_hr_faq.txt`** — fictional **Apex Digital Solutions** HR excerpts + internal FAQ (PTO, remote work, conduct, contacts) for demos; **Download sample HR & FAQ (TXT)** in the sidebar uses this file.
 
 **Demo flow:** start the API → open Streamlit → **Test connection** → download the sample → **Upload & add to knowledge base** → ask e.g. “What is the PTO carryover limit?”
@@ -248,7 +250,7 @@ streamlit run frontend/app.py
 
 - **`POST /chat`** accepts JSON `message` (optional if images present) plus `images[]` with `{ "media_type", "base64_data" }` (JPEG/PNG/WebP/GIF, size-capped). RAG still retrieves text chunks; the LLM receives **document excerpts + optional user images** (OpenAI vision; Gemini multimodal on quota fallback when images are present).
 - **`backend/app/services/vision_service.py`** — for **PDF uploads**, embedded raster images are extracted (**PyMuPDF**), briefly **captioned** with the vision model, and the captions are appended to the extracted text before chunking/indexing so charts/figures contribute to search.
-- **Streamlit** — file picker for **photos or short video**; **video → first frame** (PNG) via **imageio**; **Send attachment only** when no typed message; widget resets after each send.
+- **React UI** — image attachment picker for chat; video-first-frame support is optional work (not required for basic use).
 - **Dependencies:** `pymupdf`, `Pillow`, `imageio`, `imageio-ffmpeg` (for common MP4/WebM first-frame extraction).
 
 **Limits / caveats**

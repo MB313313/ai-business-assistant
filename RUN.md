@@ -1,10 +1,10 @@
 # How to run this project
 
-Quick reference: start the **API** first, then the **Streamlit** UI.
+Quick reference: start the **API** first, then the **React (Vite)** UI.
 
 ## One-time setup
 
-From the project root (folder that contains `backend/`, `frontend/`, `requirements.txt`):
+From the project root (folder that contains `backend/`, `frontend-react/`, `requirements.txt`):
 
 ```powershell
 python -m venv .venv
@@ -32,16 +32,16 @@ cd backend
 uvicorn app.main:app --reload
 ```
 
-## Run frontend (Streamlit)
+## Run frontend (React / Vite)
 
-Use a **second** terminal, project root, venv activated:
+Use a **second** terminal:
 
 ```powershell
-streamlit run frontend/app.py
+cd frontend-react
+npm install
+npm run dev
 ```
 
-Streamlit opens in the browser (default **http://localhost:8501**).
+Vite opens in the browser (default **http://localhost:5173**).
 
-## Optional
-
-If the API is not on `http://127.0.0.1:8000`, set **`API_BASE_URL`** in `.env` so the Streamlit app points at the right server.
+The React app uses a dev proxy so it can call the backend as `/api/*` (configured in `frontend-react/vite.config.ts`).
