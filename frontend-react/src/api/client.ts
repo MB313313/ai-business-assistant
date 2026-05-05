@@ -65,7 +65,8 @@ async function fetchJson<T>(url: string, init: RequestInit, timeoutMs: number): 
       } catch {
         detail = (await res.text()).trim()
       }
-      const msg = detail ? `${res.status} ${res.statusText}: ${detail}` : `${res.status} ${res.statusText}`
+      // Prefer the API's user-facing detail message when present.
+      const msg = detail || `${res.status} ${res.statusText}`
       throw new Error(msg)
     }
     return (await res.json()) as T
@@ -137,6 +138,23 @@ export function createApiClient(opts: ApiClientOptions = {}) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
+        },
+        timeoutMs,
+      )
+    },
+
+    chatWithFiles: async (message: string, files: File[]): Promise<ChatResponse> => {
+      const url = joinUrl(baseUrl, '/chat-with-files')
+      const form = new FormData()
+      form.append('message', (message ?? '').toString())
+      for (const f of files) {
+        form.append('files', f, f.name)
+      }
+      return await fetchJson<ChatResponse>(
+        url,
+        {
+          method: 'POST',
+          body: form,
         },
         timeoutMs,
       )
