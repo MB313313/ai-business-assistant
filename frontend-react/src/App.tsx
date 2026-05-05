@@ -231,6 +231,25 @@ function App() {
   return (
     <div className={`appShell ${sidebarOpen ? 'appShellSidebarOpen' : 'appShellSidebarClosed'}`}>
       {isMobile ? (
+        <button
+          type="button"
+          className={[
+            'sidebarToggle',
+            'sidebarToggleDocked',
+            sidebarOpen ? 'sidebarToggleDocked--open' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          aria-expanded={sidebarOpen}
+          onClick={() => setSidebarOpen((v) => !v)}
+        >
+          <span className="burgerBar burgerBarTop" aria-hidden="true" />
+          <span className="burgerBar burgerBarMid" aria-hidden="true" />
+          <span className="burgerBar burgerBarBot" aria-hidden="true" />
+        </button>
+      ) : null}
+      {isMobile ? (
         <>
           <div className={`sidebarDrawer ${sidebarOpen ? 'sidebarDrawerOpen' : ''}`}>
             <Sidebar
@@ -271,26 +290,16 @@ function App() {
 
       <main className="main">
         <div>
-          <div className="pageHeaderRow">
-            {isMobile ? (
-              <button
-                type="button"
-                className="sidebarToggle"
-                aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-                onClick={() => setSidebarOpen((v) => !v)}
-              >
-                ☰
-              </button>
-            ) : null}
-            <div className="pageHeaderText">
-              <h1 className="title titleBig">AI Business Assistant</h1>
-              <p className="subtitle subtitleBig">
-                Welcome. This workspace is here to help you get clear, reliable answers to business
-                questions—using your indexed documents and company knowledge so responses stay aligned
-                with the information your organization trusts.
-              </p>
+          <header className={['pageHeader', isMobile ? 'pageHeader--withNav' : ''].filter(Boolean).join(' ')}>
+            <div className="pageHeaderTitleLine">
+              <h1 className="title titleBig pageHeaderTitle">AI Business Assistant</h1>
             </div>
-          </div>
+            <p className="subtitle subtitleBig pageHeaderSubtitle">
+              Welcome. This workspace is here to help you get clear, reliable answers to business
+              questions—using your indexed documents and company knowledge so responses stay aligned
+              with the information your organization trusts.
+            </p>
+          </header>
 
           <details className="howTo card" open={false}>
             <summary className="howToSummary">
