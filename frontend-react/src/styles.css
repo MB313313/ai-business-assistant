@@ -48,6 +48,7 @@ a {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 340px 1fr;
+  height: 100svh;
 }
 
 .appShellSidebarClosed {
@@ -332,15 +333,25 @@ a {
 
 /* Dotted rule below upload & index card */
 .kbSectionDivider {
-  margin: 18px 2px 0;
-  height: 3px;
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 16px 0 0;
+  min-height: 6px;
+  height: 6px;
   border: 0;
   background-color: transparent;
-  background-image: radial-gradient(circle at 3px 50%, rgba(255, 255, 255, 0.26) 1px, transparent 1.5px);
-  background-size: 7px 3px;
+  /* Slightly larger / brighter dots so it stays visible beside the scrollbar */
+  background-image: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 255, 255, 0.38) 1.25px,
+    transparent 1.6px
+  );
+  background-size: 8px 6px;
   background-repeat: repeat-x;
   background-position: 0 50%;
-  opacity: 0.9;
+  opacity: 1;
 }
 
 /* Mobile drawer */
@@ -374,6 +385,257 @@ a {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: 0; /* allow internal scrolling inside grid */
+  height: 100%;
+  /* Always reserve scrollbar space + show vertical scrollbar (not only on overflow) */
+  overflow-y: scroll;
+  overflow-x: hidden; /* avoid 500px upload zone forcing horizontal scroll / clipping */
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+/* Sidebar column is narrow (~340px); keep upload UI full-width of panel */
+.sidebar .uploadZone {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Sidebar scrollbar (subtle, dark) */
+.sidebar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.chatNav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chatNavButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.chatNavButton:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.chatNavIcon {
+  width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.chatNavLabel {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.chatSearchRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+}
+
+.chatSearchRow:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.chatSearchInput {
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  width: 100%;
+  font-size: 14px;
+}
+
+.chatSearchInput::placeholder {
+  color: rgba(255, 255, 255, 0.70);
+}
+
+.chatThreadRow {
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.chatThreadRow:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.chatThreadRowActive {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.chatThreadTitle {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+.chatThreadTitleText {
+  min-width: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chatThreadPinned {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.72);
+  flex-shrink: 0;
+}
+
+.chatThreadDots {
+  width: 34px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+.chatThreadDots:hover {
+  color: #ffffff;
+}
+
+.chatThreadDots {
+  color: #b6b5b5;
+}
+
+.threadMenu {
+  position: absolute;
+  right: 6px;
+  top: 40px;
+  z-index: 20;
+  min-width: 220px;
+  padding: 8px;
+  border-radius: 14px;
+  background: #262626;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+}
+
+.threadMenuItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.threadMenuItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.threadMenuIcon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
+  flex-shrink: 0;
+}
+
+.threadMenuDivider {
+  height: 1px;
+  margin: 6px 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+.threadMenuItemDanger {
+  color: #ff5a5f;
+}
+
+.threadMenuItemDanger:hover {
+  background: rgba(255, 90, 95, 0.10);
+  border-color: rgba(255, 90, 95, 0.22);
+}
+
+.chatThreadDots:hover {
+  color: #ffffff;
+}
+
+.chatThreadDots {
+  color: #b6b5b5;
 }
 
 .main {
@@ -403,7 +665,7 @@ a {
 .subtitle {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .subtitleBig {
@@ -443,8 +705,21 @@ details[open] .howToChevron {
 }
 
 .howToBody {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 61;
   padding: 0 12px 12px;
+  margin-top: 0;
+  border: 1px solid var(--border);
   border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: rgba(33, 33, 33, 0.98);
+  box-shadow: rgba(0, 0, 0, 0.55) 0 22px 50px -14px;
+  max-height: min(58vh, 440px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .howToList {
@@ -481,9 +756,21 @@ details[open] .howToChevron {
 .card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 10px;
   background: rgba(255, 255, 255, 0.02);
   box-shadow: var(--shadow);
+}
+
+/* Dropdown overlays chat (must come after `.card` so padding wins) */
+details.howTo.card {
+  position: relative;
+  z-index: 1;
+  padding: 0;
+  overflow: visible;
+}
+
+details.howTo.card[open] {
+  z-index: 60;
 }
 
 .label {
@@ -541,7 +828,6 @@ details[open] .howToChevron {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
   flex-wrap: wrap;
   margin-top: 10px;
 }
@@ -637,6 +923,8 @@ details[open] .howToChevron {
 }
 
 .chatList {
+  position: relative;
+  z-index: 0;
   display: flex;
   flex-direction: column;
   gap: 50px;
@@ -1226,7 +1514,7 @@ details[open] .howToChevron {
   .sidebar {
     border-right: 0;
     border-bottom: 0;
-    height: 100%;
+    height: 100svh;
   }
 }
 

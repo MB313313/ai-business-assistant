@@ -6,10 +6,13 @@ import os
 import tempfile
 from io import BytesIO
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import func, select
 
-from ..services import documents, rag
+from ..db import db_session, utc_now
+from ..models import ChatMessage, ChatThread, User
+from ..services import documents, llm, rag
 
 router = APIRouter(tags=["chat"])
 
@@ -22,6 +25,54 @@ _ALLOWED_DOC_SUFFIX = frozenset({".pdf", ".txt", ".docx"})
 # Chat attachment limits (multipart). Keep these modest for reliability; override via env if needed.
 _DEFAULT_FILE_MAX_BYTES = 25 * 1024 * 1024
 _DEFAULT_TOTAL_MAX_BYTES = 100 * 1024 * 1024
+
+
+def _clean_title_seed(text: str) -> str:
+    t = (text or "").strip()
+    if not t:
+        return ""
+    t = " ".join(t.split())
+    if len(t) > 72:
+        t = t[:72].rstrip() + "…"
+    return t
+
+
+def _finalize_chat_title(raw: str, fallback_seed: str) -> str:
+    """Normalize LLM title output; fall back to a trimmed first-message seed."""
+    t = (raw or "").strip().strip('"').strip("'").strip("\u201c\u201d\u2018\u2019")
+    t = t.split("\n")[0].strip(" -•")
+    t = " ".join(t.split())
+    for prefix in ("Title:", "Conversation title:", "Thread:"):
+        if t.lower().startswith(prefix.lower()):
+            t = t[len(prefix) :].strip()
+    if len(t) > 200:
+        t = t[:200].rstrip() + "…"
+    generic = frozenset(
+        {"chat", "conversation", "new chat", "untitled", "message", "question", "help"}
+    )
+    if not t or t.lower() in generic:
+        return _clean_title_seed(fallback_seed)
+    return t
+
+
+async def _apply_thread_title_first_turn(
+    th: ChatThread,
+    user_for_title: str,
+    assistant_reply: str,
+) -> None:
+    """First exchange only (caller checks): summary-style title, not a verbatim copy of the user text."""
+    if (th.title or "").strip() not in ("Chat", ""):
+        return
+    seed = (user_for_title or "").strip()
+    try:
+        raw = await llm.suggest_chat_title(seed, (assistant_reply or "").strip())
+        title = _finalize_chat_title(raw, seed)
+        if title:
+            th.title = title[:200]
+    except Exception:
+        fb = _clean_title_seed(seed)
+        if fb:
+            th.title = fb[:200]
 
 
 def _env_int(name: str, default: int) -> int:
@@ -105,6 +156,7 @@ class ChatImagePart(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field("", max_length=32000)
     images: list[ChatImagePart] = Field(default_factory=list, max_length=_MAX_IMAGES)
+    thread_id: str | None = Field(default=None, description="Optional: save this turn into a chat thread")
 
     @model_validator(mode="after")
     def need_text_or_image(self) -> ChatRequest:
@@ -135,7 +187,10 @@ def _decode_images(parts: list[ChatImagePart]) -> list[tuple[bytes, str]]:
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(body: ChatRequest) -> ChatResponse:
+async def chat(
+    body: ChatRequest,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> ChatResponse:
     try:
         imgs = _decode_images(body.images) if body.images else []
         reply = await rag.answer_with_rag(body.message, images=imgs or None)
@@ -145,6 +200,28 @@ async def chat(body: ChatRequest) -> ChatResponse:
         if "OPENAI_API_KEY" in str(e):
             raise HTTPException(status_code=503, detail=str(e)) from e
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+    # Optional persistence: only when both X-User-Id and thread_id are provided
+    if (x_user_id or "").strip() and (body.thread_id or "").strip():
+        uid = (x_user_id or "").strip()
+        tid = (body.thread_id or "").strip()
+        with db_session() as db:
+            u = db.get(User, uid)
+            th = db.get(ChatThread, tid)
+            if u is not None and th is not None and th.user_id == uid:
+                prev_users = db.execute(
+                    select(func.count()).select_from(ChatMessage).where(
+                        ChatMessage.thread_id == tid, ChatMessage.role == "user"
+                    )
+                ).scalar_one()
+                now = utc_now()
+                user_text = (body.message or "").strip()
+                db.add(ChatMessage(thread_id=tid, role="user", content=user_text, created_at=now))
+                db.add(ChatMessage(thread_id=tid, role="assistant", content=(reply or "").strip(), created_at=now))
+                th.updated_at = now
+                if int(prev_users or 0) == 0 and (th.title or "").strip() in ("Chat", ""):
+                    await _apply_thread_title_first_turn(th, user_text, reply)
+                db.commit()
     return ChatResponse(reply=reply)
 
 
@@ -152,6 +229,8 @@ async def chat(body: ChatRequest) -> ChatResponse:
 async def chat_with_files(
     message: str = Form(""),
     files: list[UploadFile] = File(default_factory=list),
+    thread_id: str = Form(""),
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> ChatResponse:
     try:
         if not message.strip() and not files:
@@ -229,4 +308,26 @@ async def chat_with_files(
         if "OPENAI_API_KEY" in str(e):
             raise HTTPException(status_code=503, detail=str(e)) from e
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+    if (x_user_id or "").strip() and thread_id.strip():
+        uid = (x_user_id or "").strip()
+        tid = thread_id.strip()
+        with db_session() as db:
+            u = db.get(User, uid)
+            th = db.get(ChatThread, tid)
+            if u is not None and th is not None and th.user_id == uid:
+                prev_users = db.execute(
+                    select(func.count()).select_from(ChatMessage).where(
+                        ChatMessage.thread_id == tid, ChatMessage.role == "user"
+                    )
+                ).scalar_one()
+                now = utc_now()
+                # Store the visible user message (not the extracted chunks)
+                display = (message or "").strip() or ("*Question with attachment*" if files else "")
+                db.add(ChatMessage(thread_id=tid, role="user", content=display, created_at=now))
+                db.add(ChatMessage(thread_id=tid, role="assistant", content=(reply or "").strip(), created_at=now))
+                th.updated_at = now
+                if int(prev_users or 0) == 0 and (th.title or "").strip() in ("Chat", ""):
+                    await _apply_thread_title_first_turn(th, display, reply)
+                db.commit()
     return ChatResponse(reply=reply)

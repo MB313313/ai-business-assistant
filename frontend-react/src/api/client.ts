@@ -6,6 +6,7 @@ export type ChatImagePart = {
 export type ChatRequest = {
   message?: string
   images?: ChatImagePart[]
+  thread_id?: string
 }
 
 export type ChatResponse = {
@@ -75,6 +76,11 @@ async function fetchJson<T>(url: string, init: RequestInit, timeoutMs: number): 
   }
 }
 
+function headersWithUserId(userId?: string): Record<string, string> {
+  const uid = (userId ?? '').trim()
+  return uid ? { 'X-User-Id': uid } : {}
+}
+
 export async function fileToBase64Data(file: File): Promise<string> {
   const buf = await file.arrayBuffer()
   const bytes = new Uint8Array(buf)
@@ -86,12 +92,129 @@ export async function fileToBase64Data(file: File): Promise<string> {
   return btoa(binary)
 }
 
+export type CreateAnonymousUserResponse = {
+  user_id: string
+}
+
+export type CreateThreadResponse = {
+  thread_id: string
+}
+
+export type EnsureDefaultThreadResponse = {
+  thread_id: string
+}
+
+export type ChatMessageOut = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
+
+export type ThreadMessagesResponse = {
+  thread_id: string
+  messages: ChatMessageOut[]
+}
+
+export type ThreadOut = {
+  id: string
+  title: string
+  pinned: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type ListThreadsResponse = {
+  threads: ThreadOut[]
+}
+
+export type RenameThreadResponse = {
+  ok: boolean
+}
+
+export type PinThreadResponse = {
+  ok: boolean
+  pinned: boolean
+}
+
 export function createApiClient(opts: ApiClientOptions = {}) {
   const baseUrl = (opts.baseUrl ?? '/api').trim().replace(/\/+$/, '')
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
   return {
     baseUrl,
+
+    createAnonymousUser: async (): Promise<CreateAnonymousUserResponse> => {
+      const url = joinUrl(baseUrl, '/users/anonymous')
+      return await fetchJson<CreateAnonymousUserResponse>(url, { method: 'POST' }, 15_000)
+    },
+
+    ensureDefaultThread: async (userId: string): Promise<EnsureDefaultThreadResponse> => {
+      const url = joinUrl(baseUrl, '/chats/default')
+      return await fetchJson<EnsureDefaultThreadResponse>(
+        url,
+        { method: 'POST', headers: headersWithUserId(userId) },
+        15_000,
+      )
+    },
+
+    createThread: async (userId: string): Promise<CreateThreadResponse> => {
+      const url = joinUrl(baseUrl, '/chats')
+      return await fetchJson<CreateThreadResponse>(
+        url,
+        { method: 'POST', headers: headersWithUserId(userId) },
+        15_000,
+      )
+    },
+
+    listThreads: async (userId: string): Promise<ListThreadsResponse> => {
+      const url = joinUrl(baseUrl, '/chats')
+      return await fetchJson<ListThreadsResponse>(url, { method: 'GET', headers: headersWithUserId(userId) }, 15_000)
+    },
+
+    renameThread: async (userId: string, threadId: string, title: string): Promise<RenameThreadResponse> => {
+      const url = joinUrl(baseUrl, `/chats/${encodeURIComponent(threadId)}`)
+      return await fetchJson<RenameThreadResponse>(
+        url,
+        {
+          method: 'PATCH',
+          headers: { ...headersWithUserId(userId), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title }),
+        },
+        15_000,
+      )
+    },
+
+    pinThread: async (userId: string, threadId: string, pinned: boolean): Promise<PinThreadResponse> => {
+      const url = joinUrl(baseUrl, `/chats/${encodeURIComponent(threadId)}/pin`)
+      return await fetchJson<PinThreadResponse>(
+        url,
+        {
+          method: 'POST',
+          headers: { ...headersWithUserId(userId), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pinned }),
+        },
+        15_000,
+      )
+    },
+
+    deleteThread: async (userId: string, threadId: string): Promise<{ ok: boolean }> => {
+      const url = joinUrl(baseUrl, `/chats/${encodeURIComponent(threadId)}`)
+      return await fetchJson<{ ok: boolean }>(
+        url,
+        { method: 'DELETE', headers: headersWithUserId(userId) },
+        15_000,
+      )
+    },
+
+    listMessages: async (userId: string, threadId: string): Promise<ThreadMessagesResponse> => {
+      const url = joinUrl(baseUrl, `/chats/${encodeURIComponent(threadId)}/messages`)
+      return await fetchJson<ThreadMessagesResponse>(
+        url,
+        { method: 'GET', headers: headersWithUserId(userId) },
+        15_000,
+      )
+    },
 
     health: async (): Promise<HealthResponse> => {
       const url = joinUrl(baseUrl, '/health')
@@ -131,6 +254,7 @@ export function createApiClient(opts: ApiClientOptions = {}) {
       const body: ChatRequest = {
         message: (req.message ?? '').toString(),
         images: req.images ?? [],
+        thread_id: req.thread_id,
       }
       return await fetchJson<ChatResponse>(
         url,
@@ -143,10 +267,16 @@ export function createApiClient(opts: ApiClientOptions = {}) {
       )
     },
 
-    chatWithFiles: async (message: string, files: File[]): Promise<ChatResponse> => {
+    chatWithFiles: async (
+      userId: string | undefined,
+      threadId: string | undefined,
+      message: string,
+      files: File[],
+    ): Promise<ChatResponse> => {
       const url = joinUrl(baseUrl, '/chat-with-files')
       const form = new FormData()
       form.append('message', (message ?? '').toString())
+      if ((threadId ?? '').trim()) form.append('thread_id', (threadId ?? '').trim())
       for (const f of files) {
         form.append('files', f, f.name)
       }
@@ -154,6 +284,7 @@ export function createApiClient(opts: ApiClientOptions = {}) {
         url,
         {
           method: 'POST',
+          headers: headersWithUserId(userId),
           body: form,
         },
         timeoutMs,

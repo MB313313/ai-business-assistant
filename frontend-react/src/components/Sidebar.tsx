@@ -1,12 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createApiClient } from '../api/client'
 import type { IndexedDoc } from './UploadModal'
 import { Tooltip } from './Tooltip'
+
+export type ChatThreadItem = {
+  id: string
+  title: string
+  pinned: boolean
+  updated_at?: string
+}
 
 type Props = {
   apiBaseUrl: string
   onApiBaseUrlChange: (v: string) => void
   onClearConversation: () => void
+  threads: ChatThreadItem[]
+  activeThreadId: string
+  onSelectThread: (threadId: string) => void
+  onRenameThread: (threadId: string, nextTitle: string) => void
+  onDeleteThread: (threadId: string) => void
+  onPinThread: (threadId: string, pinned: boolean) => void
   kbDocs: IndexedDoc[]
   onKbIndexed: (doc: IndexedDoc) => void
   onRequestClose?: () => void
@@ -18,7 +31,19 @@ function fileSuffix(name: string): string {
   return i >= 0 ? n.slice(i) : ''
 }
 
-export function Sidebar({ apiBaseUrl, kbDocs, onKbIndexed, onRequestClose }: Props) {
+export function Sidebar({
+  apiBaseUrl,
+  onClearConversation,
+  threads,
+  activeThreadId,
+  onSelectThread,
+  onRenameThread,
+  onDeleteThread,
+  onPinThread,
+  kbDocs,
+  onKbIndexed,
+  onRequestClose,
+}: Props) {
   const api = useMemo(() => createApiClient({ baseUrl: apiBaseUrl || '/api' }), [apiBaseUrl])
   const [kbFile, setKbFile] = useState<File | null>(null)
   const [kbDragOver, setKbDragOver] = useState(false)
@@ -31,12 +56,135 @@ export function Sidebar({ apiBaseUrl, kbDocs, onKbIndexed, onRequestClose }: Pro
   >({ kind: 'idle' })
   const [toast, setToast] = useState('')
   const toastTimerRef = useMemo(() => ({ id: null as number | null }), [])
+  const [menuForId, setMenuForId] = useState<string>('')
+  const [chatSearch, setChatSearch] = useState<string>('')
+  const [renameModal, setRenameModal] = useState<{ open: boolean; threadId: string; title: string }>({
+    open: false,
+    threadId: '',
+    title: '',
+  })
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; threadId: string; title: string }>({
+    open: false,
+    threadId: '',
+    title: '',
+  })
+
+  const [prevTitles, setPrevTitles] = useState<Record<string, string>>({})
+  const [titleAnim, setTitleAnim] = useState<
+    Record<string, { full: string; visible: number; done: boolean }>
+  >({})
+  const [animatedIds, setAnimatedIds] = useState<Set<string>>(() => {
+    try {
+      const raw = window.localStorage.getItem('animatedThreadTitleIds') ?? '[]'
+      const arr = JSON.parse(raw) as unknown
+      if (Array.isArray(arr)) return new Set(arr.map((x) => String(x)))
+    } catch {
+      // ignore
+    }
+    return new Set()
+  })
+
+  useEffect(() => {
+    if (!menuForId) return
+    const onPointerDown = (e: PointerEvent) => {
+      const el = e.target
+      if (!(el instanceof Element)) return
+      if (el.closest('.threadMenu') || el.closest('.chatThreadDots')) return
+      setMenuForId('')
+    }
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => window.removeEventListener('pointerdown', onPointerDown, true)
+  }, [menuForId])
+
+  useEffect(() => {
+    // Detect a "new title appears" transition and start a typewriter animation.
+    // Typical flow: new thread is created with title "Chat", then after first reply backend updates title.
+    const nextPrev: Record<string, string> = { ...prevTitles }
+    const toStart: Array<{ id: string; title: string }> = []
+    for (const t of threads) {
+      const id = t.id
+      const cur = (t.title || 'Chat').toString()
+      const prev = (prevTitles[id] ?? '').toString()
+      if (cur && cur !== 'Chat' && (prev === '' || prev === 'Chat') && prev !== cur && !animatedIds.has(id)) {
+        toStart.push({ id, title: cur })
+      }
+      nextPrev[id] = cur
+    }
+    // Prune removed threads from animation maps
+    const alive = new Set(threads.map((t) => t.id))
+    const nextAnim: typeof titleAnim = {}
+    for (const [id, v] of Object.entries(titleAnim)) {
+      if (alive.has(id)) nextAnim[id] = v
+    }
+    if (toStart.length) {
+      for (const it of toStart) {
+        nextAnim[it.id] = { full: it.title, visible: 0, done: false }
+      }
+    }
+    setPrevTitles(nextPrev)
+    setTitleAnim(nextAnim)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threads])
+
+  useEffect(() => {
+    const active = Object.entries(titleAnim).filter(([, v]) => v && !v.done)
+    if (!active.length) return
+    const id = window.setTimeout(() => {
+      setTitleAnim((prev) => {
+        const next: typeof prev = { ...prev }
+        const finished: string[] = []
+        for (const [tid, st] of Object.entries(prev)) {
+          if (!st || st.done) continue
+          const nextVis = Math.min(st.full.length, st.visible + 1)
+          const done = nextVis >= st.full.length
+          next[tid] = { ...st, visible: nextVis, done }
+          if (done) finished.push(tid)
+        }
+        if (finished.length) {
+          setAnimatedIds((cur) => {
+            const out = new Set(cur)
+            for (const tid of finished) out.add(tid)
+            try {
+              window.localStorage.setItem('animatedThreadTitleIds', JSON.stringify(Array.from(out)))
+            } catch {
+              // ignore
+            }
+            return out
+          })
+        }
+        return next
+      })
+    }, 18)
+    return () => window.clearTimeout(id)
+  }, [titleAnim])
+
+  useEffect(() => {
+    if (!renameModal.open && !deleteModal.open) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setRenameModal({ open: false, threadId: '', title: '' })
+        setDeleteModal({ open: false, threadId: '', title: '' })
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [renameModal.open, deleteModal.open])
 
   function showToast(msg: string) {
     setToast(msg)
     if (toastTimerRef.id) window.clearTimeout(toastTimerRef.id)
     toastTimerRef.id = window.setTimeout(() => setToast(''), 6500)
   }
+
+  const filteredThreads = useMemo(() => {
+    const q = chatSearch.trim().toLowerCase()
+    return threads
+      .filter((t) => {
+        if (!q) return true
+        return (t.title || 'Chat').toLowerCase().includes(q)
+      })
+      .slice(0, 30)
+  }, [threads, chatSearch])
 
   async function uploadToKnowledgeBase() {
     if (!kbFile) return
@@ -67,6 +215,119 @@ export function Sidebar({ apiBaseUrl, kbDocs, onKbIndexed, onRequestClose }: Pro
 
   return (
     <aside className="sidebar">
+      {renameModal.open ? (
+        <div className="modalOverlay" role="dialog" aria-modal="true" aria-label="Rename chat">
+          <div className="modalCard">
+            <div className="modalHeader">
+              <div>
+                <div className="modalTitle">Rename chat</div>
+                <div className="modalSub">Choose a short title for this chat.</div>
+              </div>
+              <button
+                type="button"
+                className="iconBtn"
+                onClick={() => setRenameModal({ open: false, threadId: '', title: '' })}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modalBody">
+              <input
+                className="input"
+                value={renameModal.title}
+                onChange={(e) => setRenameModal((s) => ({ ...s, title: e.target.value }))}
+                placeholder="Chat title"
+                autoFocus
+              />
+            </div>
+
+            <div className="modalFooter">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setRenameModal({ open: false, threadId: '', title: '' })}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btnPrimary"
+                onClick={() => {
+                  const next = renameModal.title.trim()
+                  if (!next) return
+                  onRenameThread(renameModal.threadId, next)
+                  setRenameModal({ open: false, threadId: '', title: '' })
+                }}
+                disabled={!renameModal.title.trim()}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+          <button
+            className="modalBackdrop"
+            type="button"
+            aria-label="Close"
+            onClick={() => setRenameModal({ open: false, threadId: '', title: '' })}
+          />
+        </div>
+      ) : null}
+
+      {deleteModal.open ? (
+        <div className="modalOverlay" role="dialog" aria-modal="true" aria-label="Delete chat">
+          <div className="modalCard">
+            <div className="modalHeader">
+              <div>
+                <div className="modalTitle">Delete chat?</div>
+                <div className="modalSub">This will permanently delete the chat and its messages.</div>
+              </div>
+              <button
+                type="button"
+                className="iconBtn"
+                onClick={() => setDeleteModal({ open: false, threadId: '', title: '' })}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modalBody">
+              <div className="subtitle" style={{ textAlign: 'left', margin: 0 }}>
+                <b>{deleteModal.title || 'Chat'}</b>
+              </div>
+            </div>
+
+            <div className="modalFooter">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setDeleteModal({ open: false, threadId: '', title: '' })}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btnPrimary"
+                onClick={() => {
+                  onDeleteThread(deleteModal.threadId)
+                  setDeleteModal({ open: false, threadId: '', title: '' })
+                }}
+                style={{ background: '#ff5a5f', borderColor: 'rgba(255, 90, 95, 0.35)' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+          <button
+            className="modalBackdrop"
+            type="button"
+            aria-label="Close"
+            onClick={() => setDeleteModal({ open: false, threadId: '', title: '' })}
+          />
+        </div>
+      ) : null}
       <div>
         <div className="sidebarHeaderRow">
           <div />
@@ -253,6 +514,215 @@ export function Sidebar({ apiBaseUrl, kbDocs, onKbIndexed, onRequestClose }: Pro
       </div>
 
       <div className="kbSectionDivider" role="presentation" aria-hidden="true" />
+
+      <div style={{ padding: '0 2px' }}>
+        <div className="chatNav">
+          <button type="button" className="chatNavButton" onClick={onClearConversation} aria-label="New chat">
+            <span className="chatNavIcon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 20h9"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            <span className="chatNavLabel">New chat</span>
+          </button>
+
+          <div className="chatSearchRow" role="search">
+            <span className="chatNavIcon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <circle
+                  cx="11"
+                  cy="11"
+                  r="7"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                />
+                <path
+                  d="M20 20l-3.2-3.2"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+            <input
+              className="chatSearchInput"
+              value={chatSearch}
+              onChange={(e) => setChatSearch(e.target.value)}
+              placeholder="Search chats"
+              aria-label="Search chats"
+            />
+          </div>
+        </div>
+
+        {threads.length ? (
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {chatSearch.trim() && filteredThreads.length === 0 ? (
+              <div className="subtitle" style={{ marginTop: 4, textAlign: 'center' }}>
+                No chat Found
+              </div>
+            ) : null}
+            {filteredThreads.map((t) => {
+              const active = t.id === activeThreadId
+              const open = menuForId === t.id
+              return (
+                <div
+                  key={t.id}
+                    className={['chatThreadRow', active ? 'chatThreadRowActive' : ''].filter(Boolean).join(' ')}
+                  title={t.title}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSelectThread(t.id)
+                    if (onRequestClose) onRequestClose()
+                  }}
+                >
+                    <div className="chatThreadTitle">
+                      {titleAnim[t.id] && !titleAnim[t.id]?.done ? (
+                        <span className="chatThreadTitleText">
+                          {titleAnim[t.id]?.full.slice(0, titleAnim[t.id]?.visible ?? 0)}
+                          <span className="typewriterCursor" aria-hidden="true" />
+                        </span>
+                      ) : (
+                        <span className="chatThreadTitleText">{t.title || 'Chat'}</span>
+                      )}
+                      {t.pinned ? (
+                        <span className="chatThreadPinned" aria-label="Pinned chat" title="Pinned chat">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path
+                              d="M14 3l7 7-4 1-3 9-4-4-6 3 3-6-4-4 9-3 2-4Z"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                      ) : null}
+                    </div>
+
+                  <button
+                    type="button"
+                      className="chatThreadDots"
+                    aria-label="Chat actions"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setMenuForId((cur) => (cur === t.id ? '' : t.id))
+                    }}
+                  >
+                    ⋯
+                  </button>
+
+                  {open ? (
+                    <div
+                      className="threadMenu"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        className="threadMenuItem"
+                        onClick={() => {
+                          setMenuForId('')
+                          setRenameModal({ open: true, threadId: t.id, title: t.title || 'Chat' })
+                        }}
+                      >
+                        <span className="threadMenuIcon" aria-hidden="true">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <path
+                              d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                        Rename
+                      </button>
+                      <div className="threadMenuDivider" role="presentation" aria-hidden="true" />
+                      <button
+                        type="button"
+                        className="threadMenuItem"
+                        onClick={() => {
+                          setMenuForId('')
+                          onPinThread(t.id, !t.pinned)
+                        }}
+                      >
+                        <span className="threadMenuIcon" aria-hidden="true">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <path
+                              d="M14 3l7 7-4 1-3 9-4-4-6 3 3-6-4-4 9-3 2-4Z"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                        {t.pinned ? 'Unpin chat' : 'Pin chat'}
+                      </button>
+                      <button
+                        type="button"
+                        className="threadMenuItem threadMenuItemDanger"
+                        onClick={() => {
+                          setMenuForId('')
+                          setDeleteModal({ open: true, threadId: t.id, title: t.title || 'Chat' })
+                        }}
+                      >
+                        <span className="threadMenuIcon" aria-hidden="true">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <path
+                              d="M4 7h16"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M10 11v7M14 11v7"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M6 7l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                        Delete
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="subtitle" style={{ marginTop: 10 }}>
+            No chats yet.
+          </div>
+        )}
+      </div>
 
       {toast ? (
         <div className="toast toastRight" role="status" aria-live="polite">

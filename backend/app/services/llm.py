@@ -4,6 +4,7 @@ import asyncio
 import base64
 import os
 from io import BytesIO
+from collections.abc import Awaitable, Callable
 from typing import Any, Final
 
 from openai import APIError, AsyncOpenAI, AuthenticationError, OpenAIError
@@ -68,6 +69,53 @@ async def _openai_chat_messages(messages: list[dict[str, Any]]) -> str:
     response = await client.chat.completions.create(model=model, messages=messages)
     choice = response.choices[0].message
     return (choice.content or "").strip()
+
+
+async def _openai_chat_messages_title(messages: list[dict[str, Any]]) -> str:
+    """Short, cheap completion for sidebar thread titles."""
+    client = _get_openai_client()
+    model = chat_model()
+    response = await client.chat.completions.create(
+        model=model,
+        messages=messages,
+        max_tokens=48,
+        temperature=0.35,
+    )
+    choice = response.choices[0].message
+    return (choice.content or "").strip()
+
+
+_SYSTEM_CHAT_TITLE: Final = (
+    "You label chat threads for a sidebar (like ChatGPT). "
+    "Output ONLY a short conversation title: typically 2–6 words, plain text, no quotes, "
+    "no trailing punctuation, no emojis. Capture the topic or intent, not the user's exact wording. "
+    "Examples: user says 'hello' → Greeting exchange; user asks about PTO policy → PTO policy question"
+)
+
+
+async def suggest_chat_title(user_message: str, assistant_reply: str) -> str:
+    """
+    Return a concise, human-style title for a new conversation from the first exchange.
+    Uses OpenAI with optional Gemini fallback on quota-style errors.
+    """
+    u = (user_message or "").strip() or "(no user text)"
+    a = (assistant_reply or "").strip() or "(no assistant reply yet)"
+    if len(a) > 900:
+        a = a[:900].rstrip() + "…"
+    user_payload = (
+        f"User message:\n{u}\n\nAssistant reply (may be long — use only to infer topic):\n{a}\n\n"
+        "Conversation title (respond with nothing else):"
+    )
+    openai_messages: list[dict[str, Any]] = [
+        {"role": "system", "content": _SYSTEM_CHAT_TITLE},
+        {"role": "user", "content": user_payload},
+    ]
+    return await _llm_with_openai_fallback_to_gemini(
+        openai_messages,
+        _SYSTEM_CHAT_TITLE,
+        user_payload,
+        openai_caller=_openai_chat_messages_title,
+    )
 
 
 async def _openai_complete(user_message: str) -> str:
@@ -172,9 +220,12 @@ async def _llm_with_openai_fallback_to_gemini(
     openai_messages: list[dict[str, Any]],
     gemini_system: str,
     gemini_user: str,
+    *,
+    openai_caller: Callable[[list[dict[str, Any]]], Awaitable[str]] | None = None,
 ) -> str:
+    caller = openai_caller or _openai_chat_messages
     try:
-        return await _openai_chat_messages(openai_messages)
+        return await caller(openai_messages)
     except AuthenticationError as e:
         raise RuntimeError("OpenAI authentication failed. Check OPENAI_API_KEY.") from e
     except APIError as e:

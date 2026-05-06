@@ -258,3 +258,20 @@ npm run dev
 - Video is **not** analyzed as full motion—only an approximate **first frame** is sent as an image. Large or exotic codecs may fail; prefer short clips or screenshots.
 - PDF figure handling depends on embedded images; vector graphics without raster images may not produce captions.
 
+---
+
+## Phase 9 — Chat persistence (SQLite) (done)
+
+**Delivered**
+
+- Chats are now stored in a local SQLite database by default at `data/app.db` (created automatically on API startup).
+- New APIs:
+  - `POST /users/anonymous` → `{ "user_id": "..." }`
+  - `POST /chats/default` (requires `X-User-Id`) → `{ "thread_id": "..." }`
+  - `GET /chats/{thread_id}/messages` (requires `X-User-Id`) → thread history
+- Existing `POST /chat-with-files` now accepts optional `thread_id` (form field) and optional `X-User-Id` header to save turns.
+
+**Frontend**
+
+- The React UI stores `chatUserId` and `chatThreadId` in `localStorage` and reloads message history on page refresh.
+

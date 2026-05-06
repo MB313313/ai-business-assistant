@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar'
 import { createApiClient } from './api/client'
 import type { IndexedDoc } from './components/UploadModal'
 import { Tooltip } from './components/Tooltip'
+import type { ChatThreadItem } from './components/Sidebar'
 
 type AttachmentStatus = 'processing' | 'ready' | 'error'
 type ChatAttachment = {
@@ -63,6 +64,9 @@ function App() {
   const api = useMemo(() => createApiClient({ baseUrl: apiBaseUrl || '/api' }), [apiBaseUrl])
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [userId, setUserId] = useState<string>(() => window.localStorage.getItem('chatUserId') ?? '')
+  const [threadId, setThreadId] = useState<string>(() => window.localStorage.getItem('chatThreadId') ?? '')
+  const [threads, setThreads] = useState<ChatThreadItem[]>([])
   const [draft, setDraft] = useState('')
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([])
   const [indexedDocs, setIndexedDocs] = useState<IndexedDoc[]>([])
@@ -82,6 +86,112 @@ function App() {
   const anyReady = chatAttachments.some((a) => a.status === 'ready')
   const anyFailed = chatAttachments.some((a) => a.status === 'error')
   const canSend = !busy && !anyProcessing && !anyFailed && (draft.trim().length > 0 || anyReady)
+
+  useEffect(() => {
+    window.localStorage.setItem('chatUserId', userId)
+  }, [userId])
+
+  useEffect(() => {
+    window.localStorage.setItem('chatThreadId', threadId)
+  }, [threadId])
+
+  useEffect(() => {
+    let cancelled = false
+    async function initChat() {
+      try {
+        setError('')
+        let uid = (userId ?? '').trim()
+        if (!uid) {
+          const u = await api.createAnonymousUser()
+          uid = (u.user_id ?? '').toString()
+          if (!uid) return
+          if (cancelled) return
+          setUserId(uid)
+        }
+
+        // Load threads list
+        const tlist = await api.listThreads(uid)
+        if (cancelled) return
+        const normalized: ChatThreadItem[] = (tlist.threads ?? []).map((t) => ({
+          id: t.id,
+          title: t.title,
+          pinned: !!t.pinned,
+          updated_at: t.updated_at,
+        }))
+        setThreads(normalized)
+
+        // If we have no active thread selected yet, pick the newest existing one (if any).
+        let tid = (threadId ?? '').trim()
+        if (!tid && normalized.length) {
+          tid = normalized[0]?.id ?? ''
+          if (tid && !cancelled) setThreadId(tid)
+        }
+        if (!tid) {
+          // No threads yet — don't auto-create one. ChatGPT-style: create on first message.
+          setMessages([])
+          return
+        }
+
+        const hist = await api.listMessages(uid, tid)
+        if (cancelled) return
+        setMessages(
+          (hist.messages ?? []).map((m) => ({
+            role: m.role,
+            content: (m.content ?? '').toString(),
+          })),
+        )
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    }
+    void initChat()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBaseUrl])
+
+  async function refreshThreads(uid: string, preferActiveId?: string) {
+    const tlist = await api.listThreads(uid)
+    const normalized: ChatThreadItem[] = (tlist.threads ?? []).map((t) => ({
+      id: t.id,
+      title: t.title,
+      pinned: !!t.pinned,
+      updated_at: t.updated_at,
+    }))
+    setThreads(normalized)
+    if (preferActiveId && normalized.some((t) => t.id === preferActiveId)) {
+      setThreadId(preferActiveId)
+    }
+  }
+
+  async function selectThread(nextThreadId: string) {
+    const uid = (userId ?? '').trim()
+    const tid = (nextThreadId ?? '').trim()
+    if (!uid || !tid) return
+    setThreadId(tid)
+    setMessages([])
+    try {
+      const hist = await api.listMessages(uid, tid)
+      setMessages(
+        (hist.messages ?? []).map((m) => ({
+          role: m.role,
+          content: (m.content ?? '').toString(),
+        })),
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function newChat() {
+    setMessages([])
+    setIndexedDocs([])
+    setChatAttachments([])
+    // ChatGPT-style: "New chat" doesn't create a server thread until first message.
+    setThreadId('')
+  }
 
   function showToast(msg: string) {
     setToast(msg)
@@ -206,12 +316,30 @@ function App() {
     setChatAttachments([])
 
     try {
-      const resp = await api.chatWithFiles(trimmed, attachmentsToSend)
+      let uid = (userId ?? '').trim()
+      if (!uid) {
+        const u = await api.createAnonymousUser()
+        uid = (u.user_id ?? '').toString()
+        if (uid) setUserId(uid)
+      }
+
+      let tid = (threadId ?? '').trim()
+      if (!tid) {
+        const r = await api.createThread(uid)
+        tid = (r.thread_id ?? '').toString()
+        if (tid) setThreadId(tid)
+        await refreshThreads(uid, tid)
+      }
+
+      const resp = await api.chatWithFiles(uid, tid, trimmed, attachmentsToSend)
       const reply = (resp.reply ?? '').toString().trim()
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: reply || '(no reply)', typewriter: true },
       ])
+
+      // Title/pin/order may have changed after message persistence.
+      await refreshThreads(uid, tid)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setMessages((prev) => [
@@ -255,10 +383,45 @@ function App() {
             <Sidebar
               apiBaseUrl={apiBaseUrl}
               onApiBaseUrlChange={setApiBaseUrl}
-              onClearConversation={() => {
-                setMessages([])
-                setIndexedDocs([])
-                setChatAttachments([])
+              onClearConversation={() => void newChat()}
+              threads={threads}
+              activeThreadId={threadId}
+              onSelectThread={(id) => void selectThread(id)}
+              onRenameThread={(id, title) => {
+                const uid = (userId ?? '').trim()
+                if (!uid) return
+                void api
+                  .renameThread(uid, id, title)
+                  .then(() => refreshThreads(uid, threadId))
+                  .catch(() => {
+                    // ignore
+                  })
+              }}
+              onDeleteThread={(id) => {
+                const uid = (userId ?? '').trim()
+                if (!uid) return
+                void api
+                  .deleteThread(uid, id)
+                  .then(() => {
+                    const nextActive = id === threadId ? '' : threadId
+                    return refreshThreads(uid, nextActive)
+                  })
+                  .then(() => {
+                    if (id === threadId) void newChat()
+                  })
+                  .catch(() => {
+                    // ignore
+                  })
+              }}
+              onPinThread={(id, pinned) => {
+                const uid = (userId ?? '').trim()
+                if (!uid) return
+                void api
+                  .pinThread(uid, id, pinned)
+                  .then(() => refreshThreads(uid, threadId))
+                  .catch(() => {
+                    // ignore
+                  })
               }}
               kbDocs={indexedDocs}
               onKbIndexed={(doc) => setIndexedDocs((prev) => [doc, ...prev])}
@@ -278,10 +441,45 @@ function App() {
         <Sidebar
           apiBaseUrl={apiBaseUrl}
           onApiBaseUrlChange={setApiBaseUrl}
-          onClearConversation={() => {
-            setMessages([])
-            setIndexedDocs([])
-            setChatAttachments([])
+          onClearConversation={() => void newChat()}
+          threads={threads}
+          activeThreadId={threadId}
+          onSelectThread={(id) => void selectThread(id)}
+          onRenameThread={(id, title) => {
+            const uid = (userId ?? '').trim()
+            if (!uid) return
+            void api
+              .renameThread(uid, id, title)
+              .then(() => refreshThreads(uid, threadId))
+              .catch(() => {
+                // ignore
+              })
+          }}
+          onDeleteThread={(id) => {
+            const uid = (userId ?? '').trim()
+            if (!uid) return
+            void api
+              .deleteThread(uid, id)
+              .then(() => {
+                const nextActive = id === threadId ? '' : threadId
+                return refreshThreads(uid, nextActive)
+              })
+              .then(() => {
+                if (id === threadId) void newChat()
+              })
+              .catch(() => {
+                // ignore
+              })
+          }}
+          onPinThread={(id, pinned) => {
+            const uid = (userId ?? '').trim()
+            if (!uid) return
+            void api
+              .pinThread(uid, id, pinned)
+              .then(() => refreshThreads(uid, threadId))
+              .catch(() => {
+                // ignore
+              })
           }}
           kbDocs={indexedDocs}
           onKbIndexed={(doc) => setIndexedDocs((prev) => [doc, ...prev])}
