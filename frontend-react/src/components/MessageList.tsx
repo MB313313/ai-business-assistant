@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export type ChatRole = 'user' | 'assistant'
 
@@ -13,6 +13,8 @@ type Props = {
   messages: ChatMessage[]
   /** Show animated “typing” dots while waiting for the assistant reply */
   assistantTyping?: boolean
+  /** Fires when any in-bubble typewriter animation is running (after the reply arrives). */
+  onAssistantTypewriterActiveChange?: (active: boolean) => void
 }
 
 function prefersReducedMotion(): boolean {
@@ -84,12 +86,24 @@ function AvatarUser() {
   )
 }
 
-function TypewriterBubble({ text }: { text: string }) {
+function TypewriterBubble({
+  text,
+  onActivityDelta,
+}: {
+  text: string
+  onActivityDelta?: (delta: 1 | -1) => void
+}) {
   const chars = useMemo(() => Array.from(text), [text])
   const reduced = useMemo(() => prefersReducedMotion(), [])
   const [visible, setVisible] = useState(() => (reduced ? chars.length : 0))
   const [done, setDone] = useState(reduced)
   const wrapRef = useRef<HTMLSpanElement | null>(null)
+
+  useEffect(() => {
+    if (reduced || done) return
+    onActivityDelta?.(1)
+    return () => onActivityDelta?.(-1)
+  }, [reduced, done, onActivityDelta])
 
   useEffect(() => {
     if (done) return
@@ -120,8 +134,23 @@ function TypewriterBubble({ text }: { text: string }) {
   )
 }
 
-export function MessageList({ messages, assistantTyping }: Props) {
+export function MessageList({ messages, assistantTyping, onAssistantTypewriterActiveChange }: Props) {
   const typingRef = useRef<HTMLDivElement | null>(null)
+  const typewriterSessions = useRef(0)
+  const onTwChangeRef = useRef(onAssistantTypewriterActiveChange)
+  onTwChangeRef.current = onAssistantTypewriterActiveChange
+
+  const bumpTypewriter = useCallback((delta: 1 | -1) => {
+    typewriterSessions.current = Math.max(0, typewriterSessions.current + delta)
+    onTwChangeRef.current?.(typewriterSessions.current > 0)
+  }, [])
+
+  useEffect(() => {
+    if (messages.length > 0) return
+    if (typewriterSessions.current === 0) return
+    typewriterSessions.current = 0
+    onTwChangeRef.current?.(false)
+  }, [messages.length])
 
   useEffect(() => {
     if (!assistantTyping) return
@@ -142,7 +171,7 @@ export function MessageList({ messages, assistantTyping }: Props) {
               {isUser ? (
                 m.content
               ) : m.typewriter ? (
-                <TypewriterBubble text={m.content} />
+                <TypewriterBubble text={m.content} onActivityDelta={bumpTypewriter} />
               ) : (
                 m.content
               )}

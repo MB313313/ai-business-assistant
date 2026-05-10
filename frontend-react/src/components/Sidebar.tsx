@@ -23,6 +23,8 @@ type Props = {
   onPinThread: (threadId: string, pinned: boolean) => void
   kbDocs: IndexedDoc[]
   onKbIndexed: (doc: IndexedDoc) => void
+  /** True while knowledge-base files are uploading or indexing on the server. */
+  onKnowledgeBaseBusyChange?: (busy: boolean) => void
   onRequestClose?: () => void
 }
 
@@ -45,6 +47,7 @@ export function Sidebar({
   onPinThread,
   kbDocs,
   onKbIndexed,
+  onKnowledgeBaseBusyChange,
   onRequestClose,
 }: Props) {
   void onApiBaseUrlChange
@@ -59,6 +62,10 @@ export function Sidebar({
     | { kind: 'ok'; message: string }
     | { kind: 'err'; message: string }
   >({ kind: 'idle' })
+  useEffect(() => {
+    const busy = kbState.kind === 'uploading' || kbState.kind === 'indexing'
+    onKnowledgeBaseBusyChange?.(busy)
+  }, [kbState.kind, onKnowledgeBaseBusyChange])
   const [toast, setToast] = useState('')
   const toastTimerRef = useMemo(() => ({ id: null as number | null }), [])
   const [menuForId, setMenuForId] = useState<string>('')

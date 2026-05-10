@@ -104,6 +104,8 @@ function App() {
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([])
   const [indexedDocs, setIndexedDocs] = useState<IndexedDoc[]>([])
   const [busy, setBusy] = useState(false)
+  const [kbBusy, setKbBusy] = useState(false)
+  const [assistantTypewriterActive, setAssistantTypewriterActive] = useState(false)
   const [error, setError] = useState<string>('')
   const [toast, setToast] = useState<string>('')
   const toastTimerRef = useRef<number | null>(null)
@@ -118,7 +120,13 @@ function App() {
   const anyProcessing = chatAttachments.some((a) => a.status === 'processing')
   const anyReady = chatAttachments.some((a) => a.status === 'ready')
   const anyFailed = chatAttachments.some((a) => a.status === 'error')
-  const canSend = !busy && !anyProcessing && !anyFailed && (draft.trim().length > 0 || anyReady)
+  const canSend =
+    !busy &&
+    !kbBusy &&
+    !assistantTypewriterActive &&
+    !anyProcessing &&
+    !anyFailed &&
+    (draft.trim().length > 0 || anyReady)
 
   useEffect(() => {
     window.localStorage.setItem(CHAT_USER_ID_STORAGE_KEY, userId)
@@ -334,6 +342,14 @@ function App() {
 
   async function sendMessage(text: string) {
     const trimmed = text.trim()
+    if (kbBusy) {
+      showToast('Wait until your documents finish uploading and indexing.')
+      return
+    }
+    if (busy || assistantTypewriterActive) {
+      showToast('Wait until the assistant finishes this reply.')
+      return
+    }
     if (anyFailed) {
       showToast('Remove failed attachments before sending.')
       return
@@ -480,6 +496,7 @@ function App() {
               }}
               kbDocs={indexedDocs}
               onKbIndexed={(doc) => setIndexedDocs((prev) => [doc, ...prev])}
+              onKnowledgeBaseBusyChange={setKbBusy}
               onRequestClose={() => setSidebarOpen(false)}
             />
           </div>
@@ -539,6 +556,7 @@ function App() {
           }}
           kbDocs={indexedDocs}
           onKbIndexed={(doc) => setIndexedDocs((prev) => [doc, ...prev])}
+          onKnowledgeBaseBusyChange={setKbBusy}
         />
       )}
 
@@ -622,7 +640,11 @@ function App() {
           </div>
         ) : null}
 
-        <MessageList messages={messages} assistantTyping={busy} />
+        <MessageList
+          messages={messages}
+          assistantTyping={busy}
+          onAssistantTypewriterActiveChange={setAssistantTypewriterActive}
+        />
 
         <div className="composerBar">
           <div className={`composerPill ${chatAttachments.length ? 'composerPillHasChips' : ''}`}>
@@ -750,6 +772,7 @@ function App() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
+                      if (!canSend) return
                       void sendMessage(draft)
                     }
                   }}
@@ -784,13 +807,17 @@ function App() {
 
                 <Tooltip
                   label={
-                    busy
-                      ? 'Sending…'
-                      : anyProcessing
-                        ? 'Please wait until attachments finish loading.'
-                        : anyFailed
-                          ? 'Remove failed attachments first.'
-                        : 'Send message'
+                    kbBusy
+                      ? 'Wait until documents finish uploading and indexing.'
+                      : busy
+                        ? 'Assistant is replying…'
+                        : assistantTypewriterActive
+                          ? 'Wait until this reply finishes appearing.'
+                          : anyProcessing
+                            ? 'Please wait until attachments finish loading.'
+                            : anyFailed
+                              ? 'Remove failed attachments first.'
+                              : 'Send message'
                   }
                 >
                   <button
