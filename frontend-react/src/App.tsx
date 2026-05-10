@@ -98,7 +98,7 @@ function App() {
   const [userId, setUserId] = useState<string>(
     () => window.localStorage.getItem(CHAT_USER_ID_STORAGE_KEY) ?? '',
   )
-  const [threadId, setThreadId] = useState<string>(() => window.localStorage.getItem('chatThreadId') ?? '')
+  const [threadId, setThreadId] = useState<string>('')
   const [threads, setThreads] = useState<ChatThreadItem[]>([])
   const [draft, setDraft] = useState('')
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([])
@@ -133,10 +133,6 @@ function App() {
   }, [userId])
 
   useEffect(() => {
-    window.localStorage.setItem('chatThreadId', threadId)
-  }, [threadId])
-
-  useEffect(() => {
     let cancelled = false
     async function initChat() {
       try {
@@ -159,14 +155,9 @@ function App() {
         }))
         setThreads(normalized)
 
-        // If we have no active thread selected yet, pick the newest existing one (if any).
-        let tid = (threadId ?? '').trim()
-        if (!tid && normalized.length) {
-          tid = normalized[0]?.id ?? ''
-          if (tid && !cancelled) setThreadId(tid)
-        }
+        // Fresh session / refresh: stay on "new chat" until the user opens a thread from the sidebar.
+        const tid = (threadId ?? '').trim()
         if (!tid) {
-          // No threads yet — don't auto-create one. ChatGPT-style: create on first message.
           setMessages([])
           return
         }
