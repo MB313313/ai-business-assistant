@@ -17,20 +17,29 @@ type Props = {
 
 type Step =
   | { kind: 'idle' }
-  | { kind: 'uploading' }
-  | { kind: 'indexing' }
+  | { kind: 'uploading'; index: number; total: number }
+  | { kind: 'indexing'; index: number; total: number }
   | { kind: 'done' }
   | { kind: 'error'; message: string }
 
+function fileSuffix(name: string): string {
+  const n = (name || '').toLowerCase().trim()
+  const i = n.lastIndexOf('.')
+  return i >= 0 ? n.slice(i) : ''
+}
+
 export function UploadModal({ open, apiBaseUrl, userId, onClose, onIndexed }: Props) {
   const api = useMemo(() => createApiClient({ baseUrl: apiBaseUrl || '/api' }), [apiBaseUrl])
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
+  const [fileInputKey, setFileInputKey] = useState(0)
   const [step, setStep] = useState<Step>({ kind: 'idle' })
 
   useEffect(() => {
     if (!open) {
-      setFile(null)
+      setFiles([])
       setStep({ kind: 'idle' })
+    } else {
+      setFileInputKey((k) => k + 1)
     }
   }, [open])
 
@@ -43,16 +52,37 @@ export function UploadModal({ open, apiBaseUrl, userId, onClose, onIndexed }: Pr
   }, [open, onClose])
 
   async function uploadAndIndex() {
-    if (!file) return
-    setStep({ kind: 'uploading' })
+    const list = files
+    if (!list.length) return
+
+    for (const file of list) {
+      const suf = fileSuffix(file.name)
+      if (['.mp4', '.webm', '.mov'].includes(suf) || (file.type || '').toLowerCase().startsWith('video/')) {
+        setStep({
+          kind: 'error',
+          message:
+            'Videos can’t be added to the knowledge base. Use PDF, TXT, or an image. (You can attach videos in chat.)',
+        })
+        return
+      }
+    }
+
     try {
       const uid = (userId ?? '').trim()
-      const up = await api.uploadDocument(file, uid || undefined)
-      setStep({ kind: 'indexing' })
-      await api.indexDocument(up.document_id, uid || undefined)
-      const doc: IndexedDoc = { name: file.name, documentId: up.document_id, chunkCount: up.chunk_count }
+      const n = list.length
+      for (let i = 0; i < n; i++) {
+        const file = list[i]
+        setStep({ kind: 'uploading', index: i + 1, total: n })
+        const up = await api.uploadDocument(file, uid || undefined)
+        setStep({ kind: 'indexing', index: i + 1, total: n })
+        await api.indexDocument(up.document_id, uid || undefined)
+        onIndexed({
+          name: file.name,
+          documentId: up.document_id,
+          chunkCount: up.chunk_count,
+        })
+      }
       setStep({ kind: 'done' })
-      onIndexed(doc)
       onClose()
     } catch (e) {
       setStep({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
@@ -62,6 +92,12 @@ export function UploadModal({ open, apiBaseUrl, userId, onClose, onIndexed }: Pr
   if (!open) return null
 
   const disabled = step.kind === 'uploading' || step.kind === 'indexing'
+  const fileLabel =
+    files.length === 0
+      ? 'No files chosen'
+      : files.length === 1
+        ? files[0].name
+        : `${files.length} files selected`
 
   return (
     <div className="modalOverlay" role="dialog" aria-modal="true">
@@ -69,7 +105,7 @@ export function UploadModal({ open, apiBaseUrl, userId, onClose, onIndexed }: Pr
         <div className="modalHeader">
           <div>
             <div className="modalTitle">Upload document</div>
-            <div className="modalSub">PDF, TXT, or an image. We’ll index it for grounded answers.</div>
+            <div className="modalSub">PDF, TXT, or images. Select one or more files—we’ll index each for grounded answers.</div>
           </div>
           <button type="button" className="iconBtn" onClick={onClose} aria-label="Close">
             ×
@@ -78,14 +114,27 @@ export function UploadModal({ open, apiBaseUrl, userId, onClose, onIndexed }: Pr
 
         <div className="modalBody">
           <input
+            key={fileInputKey}
             className="input"
             type="file"
+            multiple
             accept=".pdf,.txt,image/png,image/jpeg,image/webp,image/gif"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => setFiles(e.target.files?.length ? Array.from(e.target.files) : [])}
           />
+          <div className="modalSub" style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
+            {fileLabel}
+          </div>
 
-          {step.kind === 'uploading' ? <div className="statusWarn">Uploading…</div> : null}
-          {step.kind === 'indexing' ? <div className="statusWarn">Indexing…</div> : null}
+          {step.kind === 'uploading' ? (
+            <div className="statusWarn">
+              Uploading file {step.index} of {step.total}…
+            </div>
+          ) : null}
+          {step.kind === 'indexing' ? (
+            <div className="statusWarn">
+              Indexing file {step.index} of {step.total}…
+            </div>
+          ) : null}
           {step.kind === 'error' ? <div className="statusErr">{step.message}</div> : null}
         </div>
 
@@ -93,7 +142,12 @@ export function UploadModal({ open, apiBaseUrl, userId, onClose, onIndexed }: Pr
           <button type="button" className="btn" onClick={onClose} disabled={disabled}>
             Cancel
           </button>
-          <button type="button" className="btn btnPrimary" onClick={() => void uploadAndIndex()} disabled={!file || disabled}>
+          <button
+            type="button"
+            className="btn btnPrimary"
+            onClick={() => void uploadAndIndex()}
+            disabled={!files.length || disabled}
+          >
             {step.kind === 'uploading' || step.kind === 'indexing' ? 'Working…' : 'Upload & index'}
           </button>
         </div>

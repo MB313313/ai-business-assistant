@@ -569,7 +569,7 @@ function App() {
                   Click <b>Test connection</b> to confirm the assistant service is reachable.
                 </li>
                 <li>
-                  Under <b>Document knowledge base</b>, upload a PDF/TXT/image and click <b>Upload &amp; index</b>.
+                  Under <b>Document knowledge base</b>, choose one or more PDFs/TXT/images and click <b>Upload &amp; index</b>.
                 </li>
                 <li>
                   Ask questions in the chat. Use the <b>+</b> to attach images to your next message.

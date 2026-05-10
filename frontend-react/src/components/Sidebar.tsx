@@ -49,12 +49,13 @@ export function Sidebar({
 }: Props) {
   void onApiBaseUrlChange
   const api = useMemo(() => createApiClient({ baseUrl: apiBaseUrl || '/api' }), [apiBaseUrl])
-  const [kbFile, setKbFile] = useState<File | null>(null)
+  const [kbFiles, setKbFiles] = useState<File[]>([])
+  const [kbFileInputKey, setKbFileInputKey] = useState(0)
   const [kbDragOver, setKbDragOver] = useState(false)
   const [kbState, setKbState] = useState<
     | { kind: 'idle' }
-    | { kind: 'uploading' }
-    | { kind: 'indexing' }
+    | { kind: 'uploading'; index: number; total: number }
+    | { kind: 'indexing'; index: number; total: number }
     | { kind: 'ok'; message: string }
     | { kind: 'err'; message: string }
   >({ kind: 'idle' })
@@ -191,28 +192,43 @@ export function Sidebar({
   }, [threads, chatSearch])
 
   async function uploadToKnowledgeBase() {
-    if (!kbFile) return
+    const list = kbFiles
+    if (!list.length) return
 
-    const suf = fileSuffix(kbFile.name)
-    if (['.mp4', '.webm', '.mov'].includes(suf) || (kbFile.type || '').toLowerCase().startsWith('video/')) {
-      setKbState({ kind: 'idle' })
-      showToast(
-        'Videos can’t be added to the knowledge base. Upload PDF, TXT, or an image instead. (You can attach videos in chat.)',
-      )
-      return
+    for (const f of list) {
+      const suf = fileSuffix(f.name)
+      if (['.mp4', '.webm', '.mov'].includes(suf) || (f.type || '').toLowerCase().startsWith('video/')) {
+        setKbState({ kind: 'idle' })
+        showToast(
+          'Videos can’t be added to the knowledge base. Upload PDF, TXT, or an image instead. (You can attach videos in chat.)',
+        )
+        return
+      }
     }
 
-    setKbState({ kind: 'uploading' })
     try {
       const uid = (userId ?? '').trim()
-      const up = await api.uploadDocument(kbFile, uid || undefined)
-      setKbState({ kind: 'indexing' })
-      await api.indexDocument(up.document_id, uid || undefined)
-      const doc: IndexedDoc = { name: kbFile.name, documentId: up.document_id, chunkCount: up.chunk_count }
-      setKbState({ kind: 'ok', message: `Indexed (${up.chunk_count} chunks).` })
-      // bubble up so App can keep list
-      onKbIndexed(doc)
-      setKbFile(null)
+      const n = list.length
+      let totalChunks = 0
+      for (let i = 0; i < n; i++) {
+        const file = list[i]
+        setKbState({ kind: 'uploading', index: i + 1, total: n })
+        const up = await api.uploadDocument(file, uid || undefined)
+        setKbState({ kind: 'indexing', index: i + 1, total: n })
+        await api.indexDocument(up.document_id, uid || undefined)
+        totalChunks += up.chunk_count
+        onKbIndexed({
+          name: file.name,
+          documentId: up.document_id,
+          chunkCount: up.chunk_count,
+        })
+      }
+      setKbState({
+        kind: 'ok',
+        message: n === 1 ? `Indexed (${totalChunks} chunks).` : `Indexed ${n} documents (${totalChunks} chunks total).`,
+      })
+      setKbFiles([])
+      setKbFileInputKey((k) => k + 1)
     } catch (e) {
       if (isLikelyConnectionError(e)) {
         showToast(SERVER_UNREACHABLE_MESSAGE)
@@ -388,7 +404,7 @@ export function Sidebar({
             </button>
           </Tooltip>
         </div>
-        <Tooltip label="Upload a PDF, TXT, or image to add it to the searchable knowledge base.">
+        <Tooltip label="Upload PDF, TXT, or images—one or more files—to add them to the searchable knowledge base.">
           <label
             className={`uploadZone ${kbDragOver ? 'uploadZoneActive' : ''}`}
             onDragEnter={(e) => {
@@ -410,8 +426,8 @@ export function Sidebar({
               e.preventDefault()
               e.stopPropagation()
               setKbDragOver(false)
-              const f = e.dataTransfer.files?.[0]
-              if (f) setKbFile(f)
+              const fl = e.dataTransfer.files
+              if (fl?.length) setKbFiles(Array.from(fl))
             }}
           >
             <div className="uploadZoneInner">
@@ -440,16 +456,22 @@ export function Sidebar({
               </div>
               <div className="uploadZoneText">
                 <div className="uploadZoneTitle">
-                  {kbFile ? kbFile.name : 'Browse or drop a file'}
+                  {kbFiles.length === 0
+                    ? 'Browse or drop file(s)'
+                    : kbFiles.length === 1
+                      ? kbFiles[0].name
+                      : `${kbFiles.length} files selected`}
                 </div>
                 <div className="uploadZoneSub">PDF, TXT, PNG/JPG/WebP/GIF</div>
               </div>
             </div>
             <input
+              key={kbFileInputKey}
               className="uploadZoneInput"
               type="file"
+              multiple
               accept=".pdf,.txt,image/png,image/jpeg,image/webp,image/gif"
-              onChange={(e) => setKbFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => setKbFiles(e.target.files?.length ? Array.from(e.target.files) : [])}
             />
           </label>
         </Tooltip>
@@ -483,12 +505,12 @@ export function Sidebar({
             className="btn btnPrimary"
             type="button"
             onClick={() => void uploadToKnowledgeBase()}
-            disabled={!kbFile || kbState.kind === 'uploading' || kbState.kind === 'indexing'}
+            disabled={!kbFiles.length || kbState.kind === 'uploading' || kbState.kind === 'indexing'}
           >
             {kbState.kind === 'uploading'
-              ? 'Uploading…'
+              ? `Uploading (${kbState.index}/${kbState.total})…`
               : kbState.kind === 'indexing'
-                ? 'Indexing…'
+                ? `Indexing (${kbState.index}/${kbState.total})…`
                 : 'Upload & index'}
           </button>
         </div>
