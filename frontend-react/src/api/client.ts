@@ -43,6 +43,33 @@ export type ApiClientOptions = {
 
 const DEFAULT_TIMEOUT_MS = 120_000
 
+/** Shown when the browser cannot reach the API (backend down, wrong URL, offline, timeout). */
+export const SERVER_UNREACHABLE_MESSAGE =
+  "We're having trouble connecting to the server. Please check that the backend is running and try again."
+
+export function isLikelyConnectionError(e: unknown): boolean {
+  if (e == null || typeof e !== 'object') return false
+  const err = e as Error
+  const name = (err.name || '').toString()
+  const msg = (err.message || '').toString().toLowerCase()
+
+  if (name === 'AbortError') return true
+
+  if (e instanceof TypeError) {
+    if (msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) {
+      return true
+    }
+  }
+
+  if (msg.includes('network request failed')) return true
+
+  // Dev proxy / gateway when the upstream (e.g. uvicorn) is down
+  const head = (err.message || '').trim()
+  if (/^(502|503|504)(\s|$)/.test(head)) return true
+
+  return false
+}
+
 function joinUrl(baseUrl: string, path: string): string {
   const b = baseUrl.replace(/\/+$/, '')
   const p = path.startsWith('/') ? path : `/${path}`
@@ -55,18 +82,37 @@ async function fetchJson<T>(url: string, init: RequestInit, timeoutMs: number): 
   try {
     const res = await fetch(url, { ...init, signal: controller.signal })
     if (!res.ok) {
-      let detail = ''
-      try {
-        const body = (await res.json()) as unknown
-        if (body && typeof body === 'object' && 'detail' in body) {
-          detail = String((body as any).detail ?? '')
-        } else {
-          detail = JSON.stringify(body)
-        }
-      } catch {
-        detail = (await res.text()).trim()
+      // Read body once — calling .json() then .text() throws "body stream already read".
+      const raw = (await res.text()).trim()
+      if ([502, 503, 504].includes(res.status)) {
+        throw new Error(`${res.status} ${res.statusText}`.trim())
       }
-      // Prefer the API's user-facing detail message when present.
+      // Vite's `/api` proxy often returns 500 with HTML or a short error when the target is down.
+      if (res.status === 500) {
+        const looksProxyUnreachable =
+          !raw ||
+          /^\s*</i.test(raw) ||
+          /ECONNREFUSED|ECONNRESET|socket hang up|ENOTFOUND|connect error/i.test(raw)
+        if (looksProxyUnreachable) {
+          throw new Error('503 Service Unavailable')
+        }
+      }
+      let detail = ''
+      if (raw) {
+        try {
+          const body = JSON.parse(raw) as unknown
+          if (body && typeof body === 'object' && 'detail' in body) {
+            detail = String((body as { detail?: unknown }).detail ?? '')
+          } else if (body && typeof body === 'object') {
+            detail = JSON.stringify(body)
+          } else {
+            detail = raw
+          }
+        } catch {
+          // Proxy often returns HTML when the backend is unreachable; don't surface huge pages.
+          detail = raw.length > 400 ? `${res.status} ${res.statusText}`.trim() : raw
+        }
+      }
       const msg = detail || `${res.status} ${res.statusText}`
       throw new Error(msg)
     }

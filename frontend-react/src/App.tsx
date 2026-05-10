@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MessageList, type ChatMessage } from './components/MessageList'
 import { Sidebar } from './components/Sidebar'
-import { createApiClient } from './api/client'
+import { createApiClient, isLikelyConnectionError, SERVER_UNREACHABLE_MESSAGE } from './api/client'
 import type { IndexedDoc } from './components/UploadModal'
 import { Tooltip } from './components/Tooltip'
 import type { ChatThreadItem } from './components/Sidebar'
@@ -142,7 +142,12 @@ function App() {
         )
       } catch (e) {
         if (cancelled) return
-        setError(e instanceof Error ? e.message : String(e))
+        if (isLikelyConnectionError(e)) {
+          setError('')
+          showToast(SERVER_UNREACHABLE_MESSAGE, 5200)
+        } else {
+          setError(e instanceof Error ? e.message : String(e))
+        }
       }
     }
     void initChat()
@@ -181,7 +186,12 @@ function App() {
         })),
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      if (isLikelyConnectionError(e)) {
+        setError('')
+        showToast(SERVER_UNREACHABLE_MESSAGE, 5200)
+      } else {
+        setError(e instanceof Error ? e.message : String(e))
+      }
     }
   }
 
@@ -193,10 +203,10 @@ function App() {
     setThreadId('')
   }
 
-  function showToast(msg: string) {
+  function showToast(msg: string, durationMs = 2600) {
     setToast(msg)
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
-    toastTimerRef.current = window.setTimeout(() => setToast(''), 2600)
+    toastTimerRef.current = window.setTimeout(() => setToast(''), durationMs)
   }
 
   function openFilePicker() {
@@ -341,16 +351,30 @@ function App() {
       // Title/pin/order may have changed after message persistence.
       await refreshThreads(uid, tid)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content:
-            'I could not complete that request right now. Please try again in a moment.',
-          typewriter: true,
-        },
-      ])
+      if (isLikelyConnectionError(e)) {
+        setError('')
+        showToast(SERVER_UNREACHABLE_MESSAGE, 5200)
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content:
+              "I couldn't reach the server just now. When it's back online, try sending your message again.",
+            typewriter: true,
+          },
+        ])
+      } else {
+        setError(e instanceof Error ? e.message : String(e))
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content:
+              'I could not complete that request right now. Please try again in a moment.',
+            typewriter: true,
+          },
+        ])
+      }
     } finally {
       setBusy(false)
     }

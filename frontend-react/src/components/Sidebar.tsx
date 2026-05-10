@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createApiClient } from '../api/client'
+import { createApiClient, isLikelyConnectionError, SERVER_UNREACHABLE_MESSAGE } from '../api/client'
 import type { IndexedDoc } from './UploadModal'
 import { Tooltip } from './Tooltip'
 
@@ -209,7 +209,12 @@ export function Sidebar({
       onKbIndexed(doc)
       setKbFile(null)
     } catch (e) {
-      setKbState({ kind: 'err', message: e instanceof Error ? e.message : String(e) })
+      if (isLikelyConnectionError(e)) {
+        showToast(SERVER_UNREACHABLE_MESSAGE)
+        setKbState({ kind: 'err', message: "Can't reach the server." })
+      } else {
+        setKbState({ kind: 'err', message: e instanceof Error ? e.message : String(e) })
+      }
     }
   }
 
