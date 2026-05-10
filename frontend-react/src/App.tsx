@@ -549,34 +549,66 @@ function App() {
               <h1 className="title titleBig pageHeaderTitle">AI Business Assistant</h1>
             </div>
             <p className="subtitle subtitleBig pageHeaderSubtitle">
-              Welcome. This workspace is here to help you get clear, reliable answers to business
-              questions—using your indexed documents and company knowledge so responses stay aligned
-              with the information your organization trusts.
+              Ask business questions in plain language and get answers grounded in the documents and
+              knowledge your team trusts—all in one place.
             </p>
           </header>
 
-          <details className="howTo card" open={false}>
+          <details className="howTo card">
             <summary className="howToSummary">
-              <span>How to use</span>
-              <span className="howToChevron" aria-hidden="true">▾</span>
+              <span className="howToSummaryMain">
+                <span className="howToSummaryIcon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M12 6v6l4 2"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <span className="howToSummaryText">
+                  <span className="howToSummaryTitle">Quick start</span>
+                  <span className="howToSummaryHint">A short guide—click to expand or collapse</span>
+                </span>
+              </span>
+              <span className="howToChevron" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M6 9l6 6 6-6"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
             </summary>
             <div className="howToBody">
               <ol className="howToList">
                 <li>
-                  In the sidebar, set the <b>Service link</b> (keep <code>/api</code> for local dev).
+                  Open the <b>sidebar</b>. Under <b>Document knowledge base</b>, add the files you want
+                  the assistant to draw from (PDF, text, or images), then choose <b>Upload &amp; index</b>.
                 </li>
                 <li>
-                  Click <b>Test connection</b> to confirm the assistant service is reachable.
+                  Start a <b>new chat</b> or open an earlier conversation from your chat list.
                 </li>
                 <li>
-                  Under <b>Document knowledge base</b>, choose one or more PDFs/TXT/images and click <b>Upload &amp; index</b>.
-                </li>
-                <li>
-                  Ask questions in the chat. Use the <b>+</b> to attach images to your next message.
+                  Type your question below. To include a file with that message, use the <b>+</b> button
+                  before you send.
                 </li>
               </ol>
               <div className="howToTip">
-                Tip: If you don’t index anything yet, answers will be limited. Index at least one document first.
+                <span className="howToTipLabel">Tip</span>
+                The assistant works best when your key company documents are added first, so answers can
+                reflect what your organization actually uses.
               </div>
             </div>
           </details>

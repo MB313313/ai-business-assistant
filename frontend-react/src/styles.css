@@ -63,7 +63,7 @@ a {
   margin: 0;
   padding: 0;
   transition: color 160ms ease;
-}.pageHeader--withNav
+}
 
 .sidebarToggle:focus-visible {
   outline: 2px solid rgba(167, 139, 250, 0.55);
@@ -674,7 +674,7 @@ a {
 }
 
 .howTo {
-  margin-top: 14px;
+  margin-top: 18px;
   padding: 0;
 }
 
@@ -685,19 +685,90 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 12px;
-  font-size: 14px;
+  gap: 14px;
+  padding: 14px 16px;
+  margin: 0;
   color: var(--text);
+  border-radius: var(--radius);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.howToSummary:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.howToSummary:focus {
+  outline: none;
+}
+
+.howToSummary:focus-visible {
+  outline: 2px solid rgba(167, 139, 250, 0.55);
+  outline-offset: 2px;
 }
 
 .howToSummary::-webkit-details-marker {
   display: none;
 }
 
+.howToSummary::marker {
+  content: '';
+}
+
+.howToSummaryMain {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  text-align: left;
+}
+
+.howToSummaryIcon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: rgba(196, 181, 253, 0.95);
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+}
+
+.howToSummaryText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.howToSummaryTitle {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.howToSummaryHint {
+  font-size: 12px;
+  color: var(--muted2);
+  line-height: 1.35;
+}
+
 .howToChevron {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
   color: var(--muted);
-  transition: transform 150ms ease;
+  transition: transform 180ms ease, color 160ms ease;
+}
+
+.howToSummary:hover .howToChevron {
+  color: var(--text);
+}
+
+details[open] .howToSummary {
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 details[open] .howToChevron {
@@ -710,12 +781,14 @@ details[open] .howToChevron {
   right: 0;
   top: 100%;
   z-index: 61;
-  padding: 0 12px 12px;
+  padding: 4px 16px 16px;
   margin-top: 0;
   border: 1px solid var(--border);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 0 0 var(--radius) var(--radius);
-  background: rgba(33, 33, 33, 0.98);
+  background: rgba(28, 28, 28, 0.98);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow: rgba(0, 0, 0, 0.55) 0 22px 50px -14px;
   max-height: min(58vh, 440px);
   overflow-y: auto;
@@ -723,15 +796,21 @@ details[open] .howToChevron {
 }
 
 .howToList {
-  margin: 12px 0 0;
-  padding-left: 18px;
+  margin: 8px 0 0;
+  padding-left: 20px;
   color: var(--text);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .howToList li {
-  margin: 8px 0;
+  margin: 10px 0;
+  padding-left: 4px;
+}
+
+.howToList li::marker {
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .howToList code {
@@ -744,13 +823,30 @@ details[open] .howToChevron {
 }
 
 .howToTip {
-  margin-top: 10px;
-  padding: 10px 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(167, 139, 250, 0.18);
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.5;
+}
+
+.howToTipLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.9);
+  margin-bottom: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .howToChevron {
+    transition: none;
+  }
 }
 
 .card {
