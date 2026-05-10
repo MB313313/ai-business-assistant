@@ -29,6 +29,16 @@ async def lifespan(app: FastAPI):
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE chat_threads ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT FALSE"))
 
+    if "users" in insp.get_table_names():
+        ucols = {c["name"] for c in insp.get_columns("users")}
+        # SQLite accepts DATETIME; PostgreSQL has no DATETIME type (use timestamptz).
+        _ts = "TIMESTAMP WITH TIME ZONE" if engine.dialect.name == "postgresql" else "DATETIME"
+        with engine.begin() as conn:
+            if "last_indexed_document_id" not in ucols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN last_indexed_document_id VARCHAR(64)"))
+            if "last_knowledge_indexed_at" not in ucols:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN last_knowledge_indexed_at {_ts}"))
+
     vector_store.try_load_from_disk()
     yield
 

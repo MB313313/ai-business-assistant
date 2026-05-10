@@ -18,6 +18,37 @@ type ChatAttachment = {
 
 const CHAT_FILE_MAX_BYTES = 25 * 1024 * 1024
 const CHAT_TOTAL_MAX_BYTES = 100 * 1024 * 1024
+const CHAT_USER_ID_STORAGE_KEY = 'chatUserId'
+
+/** In-flight anonymous user creation per API base (avoids duplicate rows from Strict Mode or parallel calls). */
+const pendingAnonymousUserByApiBase = new Map<string, Promise<string>>()
+
+type ApiWithAnonymousUser = {
+  baseUrl: string
+  createAnonymousUser: () => Promise<{ user_id: string }>
+}
+
+async function ensureAnonymousUserId(api: ApiWithAnonymousUser): Promise<string> {
+  const existing = (window.localStorage.getItem(CHAT_USER_ID_STORAGE_KEY) ?? '').trim()
+  if (existing) return existing
+
+  const baseKey = api.baseUrl || '/api'
+  let pending = pendingAnonymousUserByApiBase.get(baseKey)
+  if (!pending) {
+    pending = (async () => {
+      const u = await api.createAnonymousUser()
+      const id = (u.user_id ?? '').toString().trim()
+      if (!id) throw new Error('No user_id from server')
+      window.localStorage.setItem(CHAT_USER_ID_STORAGE_KEY, id)
+      return id
+    })()
+    void pending.finally(() => {
+      pendingAnonymousUserByApiBase.delete(baseKey)
+    })
+    pendingAnonymousUserByApiBase.set(baseKey, pending)
+  }
+  return pending
+}
 
 function fileSuffix(name: string): string {
   const n = (name || '').toLowerCase().trim()
@@ -64,7 +95,9 @@ function App() {
   const api = useMemo(() => createApiClient({ baseUrl: apiBaseUrl || '/api' }), [apiBaseUrl])
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [userId, setUserId] = useState<string>(() => window.localStorage.getItem('chatUserId') ?? '')
+  const [userId, setUserId] = useState<string>(
+    () => window.localStorage.getItem(CHAT_USER_ID_STORAGE_KEY) ?? '',
+  )
   const [threadId, setThreadId] = useState<string>(() => window.localStorage.getItem('chatThreadId') ?? '')
   const [threads, setThreads] = useState<ChatThreadItem[]>([])
   const [draft, setDraft] = useState('')
@@ -88,7 +121,7 @@ function App() {
   const canSend = !busy && !anyProcessing && !anyFailed && (draft.trim().length > 0 || anyReady)
 
   useEffect(() => {
-    window.localStorage.setItem('chatUserId', userId)
+    window.localStorage.setItem(CHAT_USER_ID_STORAGE_KEY, userId)
   }, [userId])
 
   useEffect(() => {
@@ -102,9 +135,7 @@ function App() {
         setError('')
         let uid = (userId ?? '').trim()
         if (!uid) {
-          const u = await api.createAnonymousUser()
-          uid = (u.user_id ?? '').toString()
-          if (!uid) return
+          uid = await ensureAnonymousUserId(api)
           if (cancelled) return
           setUserId(uid)
         }
@@ -328,8 +359,7 @@ function App() {
     try {
       let uid = (userId ?? '').trim()
       if (!uid) {
-        const u = await api.createAnonymousUser()
-        uid = (u.user_id ?? '').toString()
+        uid = await ensureAnonymousUserId(api)
         if (uid) setUserId(uid)
       }
 

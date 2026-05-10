@@ -22,6 +22,9 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    # Updated on every successful /vector/index for this user (most recent knowledge-base addition).
+    last_indexed_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_knowledge_indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     threads: Mapped[list["ChatThread"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     knowledge_documents: Mapped[list["UserKnowledgeDocument"]] = relationship(

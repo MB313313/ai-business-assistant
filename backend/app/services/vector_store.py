@@ -148,3 +148,110 @@ async def retrieve_relevant_chunks(query: str, top_k: int = 5) -> list[Retrieved
             )
         )
     return hits
+
+
+async def retrieve_relevant_chunks_scoped(
+    query: str,
+    top_k: int,
+    allowed_document_ids: frozenset[str],
+) -> list[RetrievedChunk]:
+    """
+    Like ``retrieve_relevant_chunks``, but only considers vectors whose ``document_id``
+    is in ``allowed_document_ids``. Use this so each user only retrieves **their**
+    indexed uploads, not every vector in the shared FAISS index.
+    """
+    if top_k < 1 or not allowed_document_ids:
+        return []
+
+    allowed = frozenset((d or "").strip() for d in allowed_document_ids if (d or "").strip())
+    if not allowed:
+        return []
+
+    q = await embedding_service.embed_query(query)
+    qv = np.asarray(q[0], dtype=np.float32)
+
+    with _lock:
+        if _index is None and _INDEX_PATH.exists() and _META_PATH.exists():
+            _load_from_disk_locked()
+        if _index is None or _index.ntotal == 0:
+            return []
+
+        idxs = [
+            i
+            for i, row in enumerate(_meta)
+            if (row.get("document_id") or "").strip() in allowed
+        ]
+        if not idxs:
+            return []
+
+        scores: list[tuple[float, int]] = []
+        for i in idxs:
+            v = np.asarray(_index.reconstruct(int(i)), dtype=np.float32)
+            s = float(np.dot(qv, v))
+            scores.append((s, i))
+
+        scores.sort(key=lambda t: t[0], reverse=True)
+        take = scores[: min(top_k, len(scores))]
+
+    hits: list[RetrievedChunk] = []
+    for score, idx in take:
+        if idx < 0 or idx >= len(_meta):
+            continue
+        row = _meta[idx]
+        hits.append(
+            RetrievedChunk(
+                document_id=row["document_id"],
+                text=row["text"],
+                score=float(score),
+            )
+        )
+    return hits
+
+
+async def retrieve_relevant_chunks_for_document(
+    query: str, document_id: str, top_k: int = 6
+) -> list[RetrievedChunk]:
+    """
+    Like ``retrieve_relevant_chunks``, but only considers vectors whose metadata
+    ``document_id`` matches. Used to surface the user's **latest** indexed upload
+    even when global top-k retrieval ranks older documents higher.
+    """
+    doc_id = (document_id or "").strip()
+    if top_k < 1 or not doc_id:
+        return []
+
+    q = await embedding_service.embed_query(query)
+    qv = np.asarray(q[0], dtype=np.float32)
+
+    with _lock:
+        if _index is None and _INDEX_PATH.exists() and _META_PATH.exists():
+            _load_from_disk_locked()
+        if _index is None or _index.ntotal == 0:
+            return []
+
+        idxs = [i for i, row in enumerate(_meta) if (row.get("document_id") or "").strip() == doc_id]
+        if not idxs:
+            return []
+
+        scores: list[tuple[float, int]] = []
+        for i in idxs:
+            v = np.asarray(_index.reconstruct(int(i)), dtype=np.float32)
+            s = float(np.dot(qv, v))
+            scores.append((s, i))
+
+        scores.sort(key=lambda t: t[0], reverse=True)
+        take = scores[: min(top_k, len(scores))]
+
+    hits: list[RetrievedChunk] = []
+    for score, idx in take:
+        if idx < 0 or idx >= len(_meta):
+            continue
+        row = _meta[idx]
+        hits.append(
+            RetrievedChunk(
+                document_id=row["document_id"],
+                text=row["text"],
+                score=float(score),
+            )
+        )
+    return hits

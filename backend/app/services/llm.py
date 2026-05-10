@@ -32,6 +32,8 @@ _SYSTEM_HYBRID: Final = (
     "Answer helpfully and accurately. "
     "When the user message includes KNOWLEDGE-BASE EXCERPTS from their uploaded documents, use them for "
     "organization-specific or document-grounded facts when they clearly apply. "
+    "Excerpts introduced as “most recently indexed knowledge” are the user's latest upload—prefer them when "
+    "the user asks about something new, a design they just added, or their last knowledge-base update. "
     "Do not invent content that appears to come from those documents if it is not supported by the excerpts. "
     "For general questions, answer from broad knowledge even when excerpts are missing or irrelevant."
 )

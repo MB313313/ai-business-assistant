@@ -2,7 +2,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from ..db import db_session
+from ..db import db_session, utc_now
 from ..models import User, UserKnowledgeDocument
 from ..services import documents, vector_store
 
@@ -46,6 +46,8 @@ async def index_document(
             with db_session() as db:
                 u = db.get(User, uid)
                 if u is not None:
+                    u.last_indexed_document_id = doc_id
+                    u.last_knowledge_indexed_at = utc_now()
                     exists = db.execute(
                         select(func.count())
                         .select_from(UserKnowledgeDocument)
@@ -56,7 +58,7 @@ async def index_document(
                     ).scalar_one()
                     if not int(exists or 0):
                         db.add(UserKnowledgeDocument(user_id=uid, document_id=doc_id))
-                        db.commit()
+                    db.commit()
 
     return IndexResponse(indexed_chunks=indexed, total_vectors=total)
 

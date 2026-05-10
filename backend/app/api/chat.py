@@ -250,7 +250,10 @@ async def chat(
         imgs = _decode_images(body.images) if body.images else []
         hist = _conversation_history_for_llm((x_user_id or "").strip(), (body.thread_id or "").strip())
         reply = await rag.answer_with_rag(
-            body.message, images=imgs or None, conversation_history=hist or None
+            body.message,
+            images=imgs or None,
+            conversation_history=hist or None,
+            user_id=(x_user_id or "").strip() or None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -367,6 +370,7 @@ async def chat_with_files(
             extra_chunks=extra_chunks,
             images=imgs or None,
             conversation_history=hist or None,
+            user_id=(x_user_id or "").strip() or None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
