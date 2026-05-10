@@ -21,6 +21,12 @@ _SYSTEM_RAG: Final = (
     "the answer, say clearly that the provided documents do not contain enough information."
 )
 
+_SYSTEM_RAG_MULTI_TURN: Final = (
+    " Earlier turns in this conversation may clarify pronouns (e.g. he/she/it/they) or very short follow-ups; "
+    "use them to interpret what the user means. Still ground claims about company documents only in the excerpts "
+    "in the latest user message."
+)
+
 _DEFAULT_OPENAI_MODEL: Final = "gpt-4o-mini"
 _DEFAULT_GEMINI_MODEL: Final = "gemini-2.0-flash"
 
@@ -253,10 +259,43 @@ async def complete_chat(user_message: str) -> str:
     )
 
 
+def _normalize_conversation_history(
+    raw: list[dict[str, Any]] | None,
+    *,
+    max_messages: int = 24,
+    max_chars: int = 4000,
+) -> list[dict[str, str]]:
+    if not raw:
+        return []
+    out: list[dict[str, str]] = []
+    for m in raw[-max_messages:]:
+        role = m.get("role")
+        if role not in ("user", "assistant"):
+            continue
+        c = (m.get("content") or "").strip()
+        if not c:
+            continue
+        if len(c) > max_chars:
+            c = c[:max_chars].rstrip() + "…"
+        out.append({"role": str(role), "content": c})
+    return out
+
+
+def _history_preamble_for_gemini(prior: list[dict[str, str]]) -> str:
+    if not prior:
+        return ""
+    lines: list[str] = []
+    for m in prior:
+        label = "User" if m["role"] == "user" else "Assistant"
+        lines.append(f"{label}: {m['content']}")
+    return "Prior conversation:\n" + "\n\n".join(lines) + "\n\n---\n\n"
+
+
 async def complete_rag_turn(
     context_chunks: list[str],
     question: str,
     images: list[tuple[bytes, str]] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> str:
     """
     RAG: ``context_chunks`` are injected into the user message; the model must ground
@@ -264,6 +303,7 @@ async def complete_rag_turn(
     (bytes, media_type) pairs sent to a vision-capable chat model together with text.
     """
     imgs = images or []
+    prior = _normalize_conversation_history(conversation_history)
     q = question.strip()
     if not q and imgs:
         q = (
@@ -272,17 +312,20 @@ async def complete_rag_turn(
         )
 
     user_core = _rag_user_content(context_chunks, q)
+    rag_system = _SYSTEM_RAG + (_SYSTEM_RAG_MULTI_TURN if prior else "")
     vision_system = (
-        _SYSTEM_RAG
+        rag_system
         + " The user may attach images; use them together with the document excerpts when answering."
     )
+    gemini_prefix = _history_preamble_for_gemini(prior)
 
     if not imgs:
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": _SYSTEM_RAG},
-            {"role": "user", "content": user_core},
-        ]
-        return await _llm_with_openai_fallback_to_gemini(messages, _SYSTEM_RAG, user_core)
+        messages: list[dict[str, Any]] = [{"role": "system", "content": rag_system}]
+        for m in prior:
+            messages.append({"role": m["role"], "content": m["content"]})
+        messages.append({"role": "user", "content": user_core})
+        gemini_user = gemini_prefix + user_core if gemini_prefix else user_core
+        return await _llm_with_openai_fallback_to_gemini(messages, rag_system, gemini_user)
 
     user_text = user_core + (
         "\n\nThe user also attached one or more images with their question. "
@@ -292,7 +335,12 @@ async def complete_rag_turn(
     for raw, mt in imgs:
         b64 = base64.standard_b64encode(raw).decode("ascii")
         parts.append({"type": "image_url", "image_url": {"url": f"data:{mt};base64,{b64}"}})
-    messages = [{"role": "system", "content": vision_system}, {"role": "user", "content": parts}]
+    messages = [{"role": "system", "content": vision_system}]
+    for m in prior:
+        messages.append({"role": m["role"], "content": m["content"]})
+    messages.append({"role": "user", "content": parts})
+
+    gemini_user_text = gemini_prefix + user_text if gemini_prefix else user_text
 
     try:
         return await _openai_chat_messages(messages)
@@ -300,9 +348,9 @@ async def complete_rag_turn(
         raise RuntimeError("OpenAI authentication failed. Check OPENAI_API_KEY.") from e
     except APIError as e:
         if _openai_quota_like(e) and _gemini_key_present():
-            return await _gemini_rag_with_images(vision_system, user_text, imgs)
+            return await _gemini_rag_with_images(vision_system, gemini_user_text, imgs)
         raise RuntimeError(f"OpenAI API error: {e}") from e
     except OpenAIError as e:
         if _openai_quota_like(e) and _gemini_key_present():
-            return await _gemini_rag_with_images(vision_system, user_text, imgs)
+            return await _gemini_rag_with_images(vision_system, gemini_user_text, imgs)
         raise RuntimeError(f"OpenAI request failed: {e}") from e

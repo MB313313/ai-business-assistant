@@ -16,6 +16,7 @@ from ..services import documents, llm, rag
 
 router = APIRouter(tags=["chat"])
 
+_CHAT_HISTORY_MSG_LIMIT = 24
 _MAX_IMAGES = 6
 _MAX_IMAGE_BYTES = 4 * 1024 * 1024
 _ALLOWED_MEDIA = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
@@ -25,6 +26,30 @@ _ALLOWED_DOC_SUFFIX = frozenset({".pdf", ".txt", ".docx"})
 # Chat attachment limits (multipart). Keep these modest for reliability; override via env if needed.
 _DEFAULT_FILE_MAX_BYTES = 25 * 1024 * 1024
 _DEFAULT_TOTAL_MAX_BYTES = 100 * 1024 * 1024
+
+
+def _conversation_history_for_llm(user_id: str, thread_id: str) -> list[dict[str, str]]:
+    """Prior turns in the thread (oldest first), for multi-turn / pronoun resolution."""
+    uid = (user_id or "").strip()
+    tid = (thread_id or "").strip()
+    if not uid or not tid:
+        return []
+    with db_session() as db:
+        th = db.get(ChatThread, tid)
+        if th is None or th.user_id != uid:
+            return []
+        rows = db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.thread_id == tid)
+            .order_by(ChatMessage.created_at.desc())
+            .limit(_CHAT_HISTORY_MSG_LIMIT)
+        ).scalars().all()
+        ordered = list(reversed(rows))
+        return [
+            {"role": m.role, "content": (m.content or "").strip()}
+            for m in ordered
+            if m.role in ("user", "assistant") and (m.content or "").strip()
+        ]
 
 
 def _clean_title_seed(text: str) -> str:
@@ -193,7 +218,10 @@ async def chat(
 ) -> ChatResponse:
     try:
         imgs = _decode_images(body.images) if body.images else []
-        reply = await rag.answer_with_rag(body.message, images=imgs or None)
+        hist = _conversation_history_for_llm((x_user_id or "").strip(), (body.thread_id or "").strip())
+        reply = await rag.answer_with_rag(
+            body.message, images=imgs or None, conversation_history=hist or None
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
@@ -301,7 +329,13 @@ async def chat_with_files(
         if not q.strip() and extra_chunks and not imgs:
             q = "Summarize the attached document(s) and extract the key business-relevant points."
 
-        reply = await rag.answer_with_rag_plus(q, extra_chunks=extra_chunks, images=imgs or None)
+        hist = _conversation_history_for_llm((x_user_id or "").strip(), thread_id.strip())
+        reply = await rag.answer_with_rag_plus(
+            q,
+            extra_chunks=extra_chunks,
+            images=imgs or None,
+            conversation_history=hist or None,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
