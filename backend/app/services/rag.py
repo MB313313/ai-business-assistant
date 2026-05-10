@@ -72,7 +72,7 @@ async def answer_with_rag(
         seen.add(t)
         chunks.append(t)
 
-    return await llm.complete_rag_turn(
+    return await llm.complete_hybrid_rag_turn(
         chunks, question, images=imgs or None, conversation_history=hist or None
     )
 
@@ -126,6 +126,6 @@ async def answer_with_rag_plus(
     if len(chunks) > 20:
         chunks = chunks[:20]
 
-    return await llm.complete_rag_turn(
+    return await llm.complete_hybrid_rag_turn(
         chunks, question, images=imgs or None, conversation_history=hist or None
     )

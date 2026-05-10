@@ -267,7 +267,7 @@ export function createApiClient(opts: ApiClientOptions = {}) {
       return await fetchJson<HealthResponse>(url, { method: 'GET' }, 15_000)
     },
 
-    uploadDocument: async (file: File): Promise<UploadDocumentResponse> => {
+    uploadDocument: async (file: File, userId?: string): Promise<UploadDocumentResponse> => {
       const url = joinUrl(baseUrl, '/upload-document')
       const form = new FormData()
       form.append('file', file, file.name)
@@ -275,27 +275,28 @@ export function createApiClient(opts: ApiClientOptions = {}) {
         url,
         {
           method: 'POST',
+          headers: headersWithUserId(userId),
           body: form,
         },
         timeoutMs,
       )
     },
 
-    indexDocument: async (documentId: string): Promise<IndexResponse> => {
+    indexDocument: async (documentId: string, userId?: string): Promise<IndexResponse> => {
       const url = joinUrl(baseUrl, '/vector/index')
       const body: IndexRequest = { document_id: documentId }
       return await fetchJson<IndexResponse>(
         url,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...headersWithUserId(userId) },
           body: JSON.stringify(body),
         },
         timeoutMs,
       )
     },
 
-    chat: async (req: ChatRequest): Promise<ChatResponse> => {
+    chat: async (req: ChatRequest, userId?: string): Promise<ChatResponse> => {
       const url = joinUrl(baseUrl, '/chat')
       const body: ChatRequest = {
         message: (req.message ?? '').toString(),
@@ -306,7 +307,7 @@ export function createApiClient(opts: ApiClientOptions = {}) {
         url,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...headersWithUserId(userId) },
           body: JSON.stringify(body),
         },
         timeoutMs,

@@ -27,6 +27,20 @@ _SYSTEM_RAG_MULTI_TURN: Final = (
     "in the latest user message."
 )
 
+_SYSTEM_HYBRID: Final = (
+    "You are a capable general assistant (similar to ChatGPT). "
+    "Answer helpfully and accurately. "
+    "When the user message includes KNOWLEDGE-BASE EXCERPTS from their uploaded documents, use them for "
+    "organization-specific or document-grounded facts when they clearly apply. "
+    "Do not invent content that appears to come from those documents if it is not supported by the excerpts. "
+    "For general questions, answer from broad knowledge even when excerpts are missing or irrelevant."
+)
+
+_SYSTEM_HYBRID_MULTI_TURN: Final = (
+    " Earlier turns may clarify pronouns or short follow-ups; use them for interpretation. "
+    "Still do not attribute document details unless the excerpts support them."
+)
+
 _DEFAULT_OPENAI_MODEL: Final = "gpt-4o-mini"
 _DEFAULT_GEMINI_MODEL: Final = "gemini-2.0-flash"
 
@@ -151,6 +165,20 @@ def _rag_user_content(context_chunks: list[str], question: str) -> str:
         "and that you cannot answer from company documents without relevant excerpts. "
         "Do not fabricate document content."
     )
+
+
+def _hybrid_user_content(context_chunks: list[str], question: str) -> str:
+    q = question.strip()
+    if context_chunks:
+        excerpts = "\n\n".join(
+            f"[excerpt {i + 1}]\n{chunk.strip()}" for i, chunk in enumerate(context_chunks)
+        )
+        return (
+            "KNOWLEDGE-BASE EXCERPTS (optional context — use when relevant; ignore when off-topic):\n\n"
+            f"{excerpts}\n\n"
+            f"User question:\n{q if q else '(See attached images if any.)'}"
+        )
+    return f"User question:\n{q if q else '(See attached images if any.)'}"
 
 
 async def _gemini_rag_with_images(
@@ -289,6 +317,69 @@ def _history_preamble_for_gemini(prior: list[dict[str, str]]) -> str:
         label = "User" if m["role"] == "user" else "Assistant"
         lines.append(f"{label}: {m['content']}")
     return "Prior conversation:\n" + "\n\n".join(lines) + "\n\n---\n\n"
+
+
+async def complete_hybrid_rag_turn(
+    context_chunks: list[str],
+    question: str,
+    images: list[tuple[bytes, str]] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
+) -> str:
+    """
+    Like ``complete_rag_turn`` but allows general knowledge; knowledge-base excerpts are optional context.
+    """
+    imgs = images or []
+    prior = _normalize_conversation_history(conversation_history)
+    q = question.strip()
+    if not q and imgs:
+        q = (
+            "The user attached image(s) but no text. Summarize what the image(s) show and relate "
+            "them to the knowledge-base excerpts when possible; otherwise describe generally."
+        )
+
+    user_core = _hybrid_user_content(context_chunks, q)
+    hybrid_system = _SYSTEM_HYBRID + (_SYSTEM_HYBRID_MULTI_TURN if prior else "")
+    vision_system = (
+        hybrid_system
+        + " The user may attach images; use them together with any knowledge-base excerpts when answering."
+    )
+    gemini_prefix = _history_preamble_for_gemini(prior)
+
+    if not imgs:
+        messages: list[dict[str, Any]] = [{"role": "system", "content": hybrid_system}]
+        for m in prior:
+            messages.append({"role": m["role"], "content": m["content"]})
+        messages.append({"role": "user", "content": user_core})
+        gemini_user = gemini_prefix + user_core if gemini_prefix else user_core
+        return await _llm_with_openai_fallback_to_gemini(messages, hybrid_system, gemini_user)
+
+    user_text = user_core + (
+        "\n\nThe user also attached one or more images with their question. "
+        "Use the images together with any knowledge-base excerpts when answering."
+    )
+    parts: list[dict[str, Any]] = [{"type": "text", "text": user_text}]
+    for raw, mt in imgs:
+        b64 = base64.standard_b64encode(raw).decode("ascii")
+        parts.append({"type": "image_url", "image_url": {"url": f"data:{mt};base64,{b64}"}})
+    messages = [{"role": "system", "content": vision_system}]
+    for m in prior:
+        messages.append({"role": m["role"], "content": m["content"]})
+    messages.append({"role": "user", "content": parts})
+
+    gemini_user_text = gemini_prefix + user_text if gemini_prefix else user_text
+
+    try:
+        return await _openai_chat_messages(messages)
+    except AuthenticationError as e:
+        raise RuntimeError("OpenAI authentication failed. Check OPENAI_API_KEY.") from e
+    except APIError as e:
+        if _openai_quota_like(e) and _gemini_key_present():
+            return await _gemini_rag_with_images(vision_system, gemini_user_text, imgs)
+        raise RuntimeError(f"OpenAI API error: {e}") from e
+    except OpenAIError as e:
+        if _openai_quota_like(e) and _gemini_key_present():
+            return await _gemini_rag_with_images(vision_system, gemini_user_text, imgs)
+        raise RuntimeError(f"OpenAI request failed: {e}") from e
 
 
 async def complete_rag_turn(

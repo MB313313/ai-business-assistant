@@ -11,6 +11,7 @@ export type ChatThreadItem = {
 }
 
 type Props = {
+  userId: string
   apiBaseUrl: string
   onApiBaseUrlChange: (v: string) => void
   onClearConversation: () => void
@@ -32,7 +33,9 @@ function fileSuffix(name: string): string {
 }
 
 export function Sidebar({
+  userId,
   apiBaseUrl,
+  onApiBaseUrlChange,
   onClearConversation,
   threads,
   activeThreadId,
@@ -44,6 +47,7 @@ export function Sidebar({
   onKbIndexed,
   onRequestClose,
 }: Props) {
+  void onApiBaseUrlChange
   const api = useMemo(() => createApiClient({ baseUrl: apiBaseUrl || '/api' }), [apiBaseUrl])
   const [kbFile, setKbFile] = useState<File | null>(null)
   const [kbDragOver, setKbDragOver] = useState(false)
@@ -200,9 +204,10 @@ export function Sidebar({
 
     setKbState({ kind: 'uploading' })
     try {
-      const up = await api.uploadDocument(kbFile)
+      const uid = (userId ?? '').trim()
+      const up = await api.uploadDocument(kbFile, uid || undefined)
       setKbState({ kind: 'indexing' })
-      await api.indexDocument(up.document_id)
+      await api.indexDocument(up.document_id, uid || undefined)
       const doc: IndexedDoc = { name: kbFile.name, documentId: up.document_id, chunkCount: up.chunk_count }
       setKbState({ kind: 'ok', message: `Indexed (${up.chunk_count} chunks).` })
       // bubble up so App can keep list

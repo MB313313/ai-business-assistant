@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
 from ..db import db_session, utc_now
-from ..models import ChatMessage, ChatThread, User
+from ..models import ChatMessage, ChatThread, User, UserKnowledgeDocument
 from ..services import documents, llm, rag
 
 router = APIRouter(tags=["chat"])
@@ -22,6 +22,12 @@ _MAX_IMAGE_BYTES = 4 * 1024 * 1024
 _ALLOWED_MEDIA = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
 _ALLOWED_VIDEO_SUFFIX = frozenset({".mp4", ".webm", ".mov"})
 _ALLOWED_DOC_SUFFIX = frozenset({".pdf", ".txt", ".docx"})
+
+_KB_REMINDER_SEPARATOR = "\n\n────────────────────────────────────────\n"
+_KB_REMINDER_TEXT = (
+    "Tip: Add your own PDFs, notes, or images to the knowledge base in the sidebar "
+    "so answers can draw on your materials—not just general knowledge."
+)
 
 # Chat attachment limits (multipart). Keep these modest for reliability; override via env if needed.
 _DEFAULT_FILE_MAX_BYTES = 25 * 1024 * 1024
@@ -50,6 +56,30 @@ def _conversation_history_for_llm(user_id: str, thread_id: str) -> list[dict[str
             for m in ordered
             if m.role in ("user", "assistant") and (m.content or "").strip()
         ]
+
+
+def _user_has_knowledge_uploads(user_id: str) -> bool:
+    uid = (user_id or "").strip()
+    if not uid:
+        return False
+    with db_session() as db:
+        if db.get(User, uid) is None:
+            return False
+        n = db.execute(
+            select(func.count())
+            .select_from(UserKnowledgeDocument)
+            .where(UserKnowledgeDocument.user_id == uid)
+        ).scalar_one()
+        return int(n or 0) > 0
+
+
+def _append_kb_reminder_if_needed(reply: str, x_user_id: str | None) -> str:
+    uid = (x_user_id or "").strip()
+    if not uid or _user_has_knowledge_uploads(uid):
+        return (reply or "").strip()
+    base = (reply or "").strip()
+    reminder = _KB_REMINDER_SEPARATOR + _KB_REMINDER_TEXT
+    return base + reminder if base else _KB_REMINDER_TEXT.strip()
 
 
 def _clean_title_seed(text: str) -> str:
@@ -229,6 +259,8 @@ async def chat(
             raise HTTPException(status_code=503, detail=str(e)) from e
         raise HTTPException(status_code=502, detail=str(e)) from e
 
+    reply = _append_kb_reminder_if_needed(reply, x_user_id)
+
     # Optional persistence: only when both X-User-Id and thread_id are provided
     if (x_user_id or "").strip() and (body.thread_id or "").strip():
         uid = (x_user_id or "").strip()
@@ -342,6 +374,8 @@ async def chat_with_files(
         if "OPENAI_API_KEY" in str(e):
             raise HTTPException(status_code=503, detail=str(e)) from e
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+    reply = _append_kb_reminder_if_needed(reply, x_user_id)
 
     if (x_user_id or "").strip() and thread_id.strip():
         uid = (x_user_id or "").strip()

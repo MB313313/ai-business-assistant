@@ -405,6 +405,7 @@ function App() {
         <>
           <div className={`sidebarDrawer ${sidebarOpen ? 'sidebarDrawerOpen' : ''}`}>
             <Sidebar
+              userId={userId}
               apiBaseUrl={apiBaseUrl}
               onApiBaseUrlChange={setApiBaseUrl}
               onClearConversation={() => void newChat()}
@@ -463,6 +464,7 @@ function App() {
         </>
       ) : (
         <Sidebar
+          userId={userId}
           apiBaseUrl={apiBaseUrl}
           onApiBaseUrlChange={setApiBaseUrl}
           onClearConversation={() => void newChat()}

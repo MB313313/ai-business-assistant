@@ -24,6 +24,22 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     threads: Mapped[list["ChatThread"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    knowledge_documents: Mapped[list["UserKnowledgeDocument"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class UserKnowledgeDocument(Base):
+    """Tracks knowledge-base uploads (after vector indexing) per user for UX reminders."""
+
+    __tablename__ = "user_knowledge_documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    document_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    user: Mapped[User] = relationship(back_populates="knowledge_documents")
 
 
 class ChatThread(Base):

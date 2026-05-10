@@ -10,6 +10,7 @@ export type IndexedDoc = {
 type Props = {
   open: boolean
   apiBaseUrl: string
+  userId?: string
   onClose: () => void
   onIndexed: (doc: IndexedDoc) => void
 }
@@ -21,7 +22,7 @@ type Step =
   | { kind: 'done' }
   | { kind: 'error'; message: string }
 
-export function UploadModal({ open, apiBaseUrl, onClose, onIndexed }: Props) {
+export function UploadModal({ open, apiBaseUrl, userId, onClose, onIndexed }: Props) {
   const api = useMemo(() => createApiClient({ baseUrl: apiBaseUrl || '/api' }), [apiBaseUrl])
   const [file, setFile] = useState<File | null>(null)
   const [step, setStep] = useState<Step>({ kind: 'idle' })
@@ -45,9 +46,10 @@ export function UploadModal({ open, apiBaseUrl, onClose, onIndexed }: Props) {
     if (!file) return
     setStep({ kind: 'uploading' })
     try {
-      const up = await api.uploadDocument(file)
+      const uid = (userId ?? '').trim()
+      const up = await api.uploadDocument(file, uid || undefined)
       setStep({ kind: 'indexing' })
-      await api.indexDocument(up.document_id)
+      await api.indexDocument(up.document_id, uid || undefined)
       const doc: IndexedDoc = { name: file.name, documentId: up.document_id, chunkCount: up.chunk_count }
       setStep({ kind: 'done' })
       onIndexed(doc)
