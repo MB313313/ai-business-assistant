@@ -85,6 +85,17 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!isMobile) {
+      document.body.style.overflow = ''
+      return
+    }
+    document.body.style.overflow = sidebarOpen ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isMobile, sidebarOpen])
+
   const [apiBaseUrl, setApiBaseUrl] = useState<string>(() => {
     return window.localStorage.getItem('apiBaseUrl') ?? '/api'
   })

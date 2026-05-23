@@ -36,6 +36,12 @@ body {
   color: var(--text);
 }
 
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100svh;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -46,9 +52,13 @@ a {
 
 .appShell {
   min-height: 100vh;
+  min-height: 100svh;
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   height: 100svh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
 }
 
 .appShellSidebarClosed {
@@ -198,7 +208,8 @@ a {
 
 .uploadZone {
   display: block;
-  width: 500px;
+  width: 100%;
+  max-width: 500px;
   border-radius: 14px;
   border: 1px dashed rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.03);
@@ -640,13 +651,18 @@ a {
 
 .main {
   padding: 18px 18px 0;
+  padding-left: max(18px, env(safe-area-inset-left, 0px));
+  padding-right: max(18px, env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
   gap: 12px;
   max-width: 980px;
   width: 100%;
+  min-width: 0;
+  min-height: 0;
   margin: 0 auto;
   height: 100svh;
+  overflow: hidden;
 }
 
 .title {
@@ -1267,7 +1283,7 @@ details.howTo.card[open] {
   position: sticky;
   bottom: 0;
   background: linear-gradient(to top, rgba(33, 33, 33, 0.98), rgba(33, 33, 33, 0.65), rgba(33, 33, 33, 0));
-  padding: 14px 0 18px;
+  padding: 14px 0 max(18px, env(safe-area-inset-bottom, 0px));
 }
 
 .composerPill {
@@ -1603,14 +1619,255 @@ details.howTo.card[open] {
   gap: 10px;
 }
 
-@media (max-width: 980px) {
-  .appShell {
-    grid-template-columns: 1fr;
+/* Tablet: slightly narrower persistent sidebar */
+@media (max-width: 1100px) and (min-width: 981px) {
+  .appShell:not(.appShellSidebarClosed) {
+    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
   }
+}
+
+/* Mobile: drawer sidebar, full-width main */
+@media (max-width: 980px) {
+  .appShell,
+  .appShellSidebarOpen,
+  .appShellSidebarClosed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .sidebar {
     border-right: 0;
     border-bottom: 0;
     height: 100svh;
+    height: 100dvh;
+    padding-top: max(16px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .sidebarDrawer {
+    height: 100svh;
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-sizing: border-box;
+  }
+
+  .main {
+    padding-top: max(14px, env(safe-area-inset-top, 0px));
+    height: 100svh;
+    height: 100dvh;
+  }
+
+  .titleBig {
+    font-size: clamp(22px, 6.5vw, 34px);
+  }
+
+  .subtitleBig {
+    font-size: clamp(14px, 3.8vw, 16px);
+  }
+
+  .pageHeader--withNav {
+    padding-left: max(52px, calc(44px + env(safe-area-inset-left, 0px)));
+  }
+
+  .howToBody {
+    max-height: min(50vh, 360px);
+  }
+
+  .toast {
+    bottom: max(86px, calc(72px + env(safe-area-inset-bottom, 0px)));
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    transform: none;
+    width: auto;
+    max-width: none;
+  }
+
+  .toastRight {
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(80px, calc(68px + env(safe-area-inset-bottom, 0px)));
+  }
+}
+
+/* Large phones */
+@media (max-width: 640px) {
+  .main {
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+    gap: 10px;
+  }
+
+  .chatList {
+    gap: 32px;
+    padding: 8px 0 14px;
+  }
+
+  .bubble {
+    font-size: 14px;
+    padding: 9px 12px;
+    max-width: min(760px, calc(100vw - 88px));
+  }
+
+  .bubbleUser {
+    max-width: min(760px, 92%);
+  }
+
+  .howToSummary {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .howToSummaryMain {
+    gap: 10px;
+  }
+
+  .howToSummaryIcon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .howToSummaryTitle {
+    font-size: 14px;
+  }
+
+  .howToSummaryHint {
+    font-size: 11px;
+  }
+
+  .howToBody {
+    padding: 4px 12px 12px;
+  }
+
+  .composerPill {
+    padding: 8px 12px;
+    border-radius: 22px;
+  }
+
+  .composerTextarea {
+    font-size: 16px; /* avoids iOS zoom on focus */
+  }
+
+  .kbHeroIconBig {
+    width: 64px;
+    height: 64px;
+  }
+
+  .kbIntroTitle {
+    font-size: 18px;
+  }
+
+  .kbIntroSub {
+    font-size: 14px;
+  }
+
+  .kbActionRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .kbActionRow .btn,
+  .kbDownloadLink {
+    justify-content: center;
+  }
+
+  .threadMenu {
+    left: auto;
+    right: 0;
+    min-width: min(220px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+  }
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+  .pageHeader--withNav {
+    padding-left: max(48px, calc(40px + env(safe-area-inset-left, 0px)));
+  }
+
+  .pageHeaderTitleLine {
+    gap: 8px;
+  }
+
+  .composerBottomRow {
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+
+  .composerInputRow {
+    flex: 1 1 calc(100% - 88px);
+    min-width: 0;
+  }
+
+  .composerActions {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .limitsPill {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
+  .plusBtn {
+    width: 30px;
+    height: 30px;
+    font-size: 20px;
+  }
+
+  .circleBtn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .miniChipName {
+    max-width: min(420px, 52vw);
+  }
+
+  .chipName {
+    max-width: min(260px, 48vw);
+  }
+
+  .modalHeader,
+  .modalBody,
+  .modalFooter {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .rowWrap {
+    gap: 8px;
+  }
+}
+
+/* Very narrow screens */
+@media (max-width: 380px) {
+  .composerInputRow .limitsPill {
+    display: none;
+  }
+
+  .composerInputRow {
+    flex: 1 1 100%;
+  }
+
+  .composerBottomRow {
+    gap: 8px;
+  }
+
+  .titleBig {
+    font-size: 20px;
+  }
+
+  .subtitleBig {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .howToSummaryHint {
+    display: none;
   }
 }
 
