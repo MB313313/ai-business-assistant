@@ -131,7 +131,7 @@ function TypewriterBubble({
   text: string
   onActivityDelta?: (delta: 1 | -1) => void
 }) {
-  const { body, tip } = useMemo(() => splitAssistantContent(text), [text])
+  const { body } = useMemo(() => splitAssistantContent(text), [text])
   const chars = useMemo(() => Array.from(body), [body])
   const reduced = useMemo(() => prefersReducedMotion(), [])
   const [visible, setVisible] = useState(() => (reduced ? chars.length : 0))
