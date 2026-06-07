@@ -1169,6 +1169,20 @@ details.howTo.card[open] {
   box-shadow: rgba(0, 0, 0, 0.2) 0 2px 12px -4px;
 }
 
+.msgKbDivider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin: 10px 0 8px;
+  width: 100%;
+}
+
+.msgKbTip {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.62);
+}
+
 /* User: accent “sent” bubble, anchored right */
 .bubbleUser {
   border: 1px solid var(--bubbleUserBorder);

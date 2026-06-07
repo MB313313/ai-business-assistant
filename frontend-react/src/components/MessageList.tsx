@@ -22,6 +22,44 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
+const KB_TIP_MARKER = '[[KB_TIP]]'
+
+function splitAssistantContent(text: string): { body: string; tip: string | null } {
+  const markerIdx = text.indexOf(KB_TIP_MARKER)
+  if (markerIdx >= 0) {
+    return {
+      body: text.slice(0, markerIdx).trimEnd(),
+      tip: text.slice(markerIdx + KB_TIP_MARKER.length).trim() || null,
+    }
+  }
+  const legacyIdx = text.indexOf('\n\n────────────────')
+  if (legacyIdx >= 0) {
+    return {
+      body: text.slice(0, legacyIdx).trimEnd(),
+      tip: text.slice(legacyIdx).replace(/^[\s\n─]+/, '').trim() || null,
+    }
+  }
+  if (text.trimStart().startsWith('Tip:')) {
+    return { body: '', tip: text.trim() }
+  }
+  return { body: text, tip: null }
+}
+
+function AssistantMessageBody({ text }: { text: string }) {
+  const { body, tip } = splitAssistantContent(text)
+  return (
+    <>
+      {body}
+      {tip ? (
+        <>
+          <hr className="msgKbDivider" />
+          <p className="msgKbTip">{tip}</p>
+        </>
+      ) : null}
+    </>
+  )
+}
+
 function AvatarAssistant() {
   return (
     <div className="msgAvatar msgAvatarAi" role="img" aria-label="Assistant">
@@ -93,7 +131,8 @@ function TypewriterBubble({
   text: string
   onActivityDelta?: (delta: 1 | -1) => void
 }) {
-  const chars = useMemo(() => Array.from(text), [text])
+  const { body, tip } = useMemo(() => splitAssistantContent(text), [text])
+  const chars = useMemo(() => Array.from(body), [body])
   const reduced = useMemo(() => prefersReducedMotion(), [])
   const [visible, setVisible] = useState(() => (reduced ? chars.length : 0))
   const [done, setDone] = useState(reduced)
@@ -123,7 +162,7 @@ function TypewriterBubble({
     return () => window.clearTimeout(id)
   }, [visible, chars, done])
 
-  if (done) return <>{text}</>
+  if (done) return <AssistantMessageBody text={text} />
 
   const shown = chars.slice(0, visible).join('')
   return (
@@ -173,7 +212,7 @@ export function MessageList({ messages, assistantTyping, onAssistantTypewriterAc
               ) : m.typewriter ? (
                 <TypewriterBubble text={m.content} onActivityDelta={bumpTypewriter} />
               ) : (
-                m.content
+                <AssistantMessageBody text={m.content} />
               )}
             </div>
             {isUser ? <AvatarUser /> : null}

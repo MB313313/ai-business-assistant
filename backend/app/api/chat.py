@@ -23,7 +23,7 @@ _ALLOWED_MEDIA = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"
 _ALLOWED_VIDEO_SUFFIX = frozenset({".mp4", ".webm", ".mov"})
 _ALLOWED_DOC_SUFFIX = frozenset({".pdf", ".txt", ".docx"})
 
-_KB_REMINDER_SEPARATOR = "\n\n────────────────────────────────────────\n"
+_KB_REMINDER_MARKER = "[[KB_TIP]]"
 _KB_REMINDER_TEXT = (
     "Tip: Add your own PDFs, notes, or images to the knowledge base in the sidebar "
     "so answers can draw on your materials—not just general knowledge."
@@ -78,7 +78,7 @@ def _append_kb_reminder_if_needed(reply: str, x_user_id: str | None) -> str:
     if not uid or _user_has_knowledge_uploads(uid):
         return (reply or "").strip()
     base = (reply or "").strip()
-    reminder = _KB_REMINDER_SEPARATOR + _KB_REMINDER_TEXT
+    reminder = f"\n\n{_KB_REMINDER_MARKER}\n{_KB_REMINDER_TEXT}"
     return base + reminder if base else _KB_REMINDER_TEXT.strip()
 
 
