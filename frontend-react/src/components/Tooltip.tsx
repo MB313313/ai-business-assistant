@@ -27,6 +27,7 @@ export function Tooltip({ label, children, disabled, className }: Props) {
 
   const el = children as ReactElement<{
     disabled?: boolean
+    'aria-describedby'?: string
     onMouseEnter?: (e: MouseEvent) => void
     onMouseLeave?: (e: MouseEvent) => void
     onFocus?: (e: FocusEvent) => void

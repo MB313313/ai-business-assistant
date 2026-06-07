@@ -1,6 +1,8 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
 from . import config as _config  # noqa: F401 — side effect: load `.env`
@@ -44,6 +46,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI Business Assistant API", version="0.1.0", lifespan=lifespan)
+
+_cors_raw = os.environ.get("CORS_ORIGINS", "*").strip()
+_cors_origins = ["*"] if _cors_raw == "*" else [o.strip() for o in _cors_raw.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_origins != ["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(chat_router)
 app.include_router(users_router)
 app.include_router(chats_router)

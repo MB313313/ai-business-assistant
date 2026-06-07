@@ -97,6 +97,8 @@ function App() {
   }, [isMobile, sidebarOpen])
 
   const [apiBaseUrl, setApiBaseUrl] = useState<string>(() => {
+    const fromEnv = (import.meta.env.VITE_API_BASE_URL ?? '').trim()
+    if (fromEnv) return fromEnv
     return window.localStorage.getItem('apiBaseUrl') ?? '/api'
   })
   useEffect(() => {
