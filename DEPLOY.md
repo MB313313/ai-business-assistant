@@ -17,11 +17,7 @@ Recommended **$0/month** stack:
 
 1. Sign up at [neon.tech](https://neon.tech) → **New project**.
 2. Copy the connection string (starts with `postgresql://...`).
-3. For SQLAlchemy + psycopg3, change the prefix to:
-   ```
-   postgresql+psycopg://USER:PASSWORD@HOST/DB?sslmode=require
-   ```
-4. Save this as `DATABASE_URL` (you will paste it into Render).
+3. Paste into Render as **`DATABASE_URL`** — the app auto-rewrites it for **psycopg v3** (no manual prefix change needed).
 
 ---
 
@@ -39,7 +35,7 @@ Recommended **$0/month** stack:
    | Key | Value |
    |-----|--------|
    | `OPENAI_API_KEY` | your OpenAI key |
-   | `DATABASE_URL` | Neon URL (`postgresql+psycopg://...`) |
+   | `DATABASE_URL` | Neon connection string (`postgresql://...` is OK) |
    | `CORS_ORIGINS` | your Vercel URL, e.g. `https://your-app.vercel.app` |
    | `PYTHON_VERSION` | `3.12.7` (optional) |
 
@@ -88,7 +84,8 @@ Recommended **$0/month** stack:
 | CORS error in browser | Set `CORS_ORIGINS` on Render to your Vercel origin (no trailing slash). |
 | “Cannot connect to server” | API cold start — wait ~1 min; check Render logs. |
 | Chat works but no doc answers | Re-upload & index (FAISS cleared after redeploy). |
-| Build fails on Render (memory) | Free tier is 512 MB; remove unused deps or use a paid plan. |
+| `ModuleNotFoundError: psycopg2` | Push latest code (auto-fixes URL) or set `DATABASE_URL` with `postgresql+psycopg://`. |
+| Build uses Python 3.14 | In Render → **Environment** → add `PYTHON_VERSION` = `3.12.7`, redeploy. |
 | PyMuPDF errors | PDF **text** still works; chart captions may be skipped. Use `.txt` for demos. |
 
 ---

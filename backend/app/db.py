@@ -21,7 +21,19 @@ def _default_sqlite_url() -> str:
     return f"sqlite:///{(data_dir / 'app.db').as_posix()}"
 
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or _default_sqlite_url()
+def _normalize_database_url(url: str) -> str:
+    """Use psycopg v3 (in requirements.txt). Neon/Render often give ``postgresql://`` which defaults to psycopg2."""
+    u = (url or "").strip()
+    if not u:
+        return u
+    if u.startswith("postgres://"):
+        return "postgresql+psycopg://" + u[len("postgres://") :]
+    if u.startswith("postgresql://") and not u.startswith("postgresql+"):
+        return "postgresql+psycopg://" + u[len("postgresql://") :]
+    return u
+
+
+DATABASE_URL = _normalize_database_url(os.environ.get("DATABASE_URL", "").strip()) or _default_sqlite_url()
 
 engine = create_engine(
     DATABASE_URL,
